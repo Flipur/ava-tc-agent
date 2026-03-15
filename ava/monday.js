@@ -40,11 +40,50 @@ const C = {
   additionalInfo:     "text12__1",
 };
 
+function extractSearchTerm(text) {
+  const withNumber = text.match(/\d+\s+[^,\n?]+/);
+  if (withNumber) return withNumber[0].trim().toLowerCase();
+
+  const withStreet = text.match(/(?:on|for|about|at|the)\s+([\w\s]+(?:cir|st|ave|blvd|dr|ln|rd|way|ct|park|glen|hill|lake|ridge|terrace)\b[^,\n?]*)/i);
+  if (withStreet) return withStreet[1].trim().toLowerCase();
+
+  const withCity = text.match(/(?:on|for|about|at|the|in)\s+([\w\s]*(?:inglewood|torrance|compton|pasadena|riverside|modesto|sacramento|oakland|emeryville|los angeles|san diego|fresno|bakersfield|hemet|acton|danville|belmont|norwalk|carson|lancaster|downey|barstow|eureka|novato|buena park|mission viejo|fountain valley|huntington beach|san clemente|san marcos|santa monica)\b[^,\n?]*)/i);
+  if (withCity) return withCity[1].trim().toLowerCase();
+
+  return null;
+}
+
+function itemToDeal(item) {
+  const cols = {};
+  for (const col of item.column_values) cols[col.id] = col.text || col.value || "";
+  return {
+    mondayId: item.id, address: item.name,
+    status: cols[C.status], requester: cols[C.requester],
+    nextStep: cols[C.nextStep], coe: cols[C.coe],
+    contractAcceptance: cols[C.contractAcceptance],
+    emdDue: cols[C.emdDue], ipEnds: cols[C.ipEnds],
+    escrow: cols[C.escrow], emdAmount: cols[C.emdAmount],
+    contractPrice: cols[C.contractPrice], marketingPrice: cols[C.marketingPrice],
+    soldPrice: cols[C.soldPrice], fee: cols[C.fee],
+    buyer: cols[C.buyer], supplierName: cols[C.supplierName],
+    supplierType: cols[C.supplierType], split: cols[C.split],
+    notes: cols[C.notes], dispoManager: cols[C.dispoManager],
+    titleCompany: cols[C.titleCompany], titleOfficer: cols[C.titleOfficer],
+    onOffMarket: cols[C.onOffMarket], exclusive: cols[C.exclusive],
+    access: cols[C.access], lockboxCode: cols[C.lockboxCode],
+    occupancy: cols[C.occupancy], additionalNotes: cols[C.additionalNotes],
+    pool: cols[C.pool], sellingPoints: cols[C.sellingPoints],
+    region: cols[C.region], bedrooms: cols[C.bedrooms],
+    bathrooms: cols[C.bathrooms], sqftHome: cols[C.sqftHome],
+    sqftLot: cols[C.sqftLot], yearBuilt: cols[C.yearBuilt],
+  };
+}
+
 export async function getDealContext(text) {
-  const m = text.match(/\d+\s+[^,\n?]+/);
-  if (!m) return null;
-  const searchTerm = m[0].trim().toLowerCase();
+  const searchTerm = extractSearchTerm(text);
+  if (!searchTerm) return null;
   console.log("Monday searching for:", searchTerm);
+
   try {
     const res = await mondayQuery(`query {
       boards(ids: ${BOARD_ID}) {
@@ -53,37 +92,17 @@ export async function getDealContext(text) {
         }
       }
     }`);
+
     const items = res?.data?.boards?.[0]?.items_page?.items || [];
     console.log("Monday total items:", items.length);
-    const item = items.find(i => i.name.toLowerCase().includes(searchTerm));
-    if (!item) {
-      console.log("Monday: no match for:", searchTerm);
-      return null;
-    }
-    console.log("Monday found:", item.name);
-    const cols = {};
-    for (const col of item.column_values) cols[col.id] = col.text || col.value || "";
-    return {
-      mondayId: item.id, address: item.name,
-      status: cols[C.status], requester: cols[C.requester],
-      nextStep: cols[C.nextStep], coe: cols[C.coe],
-      contractAcceptance: cols[C.contractAcceptance],
-      emdDue: cols[C.emdDue], ipEnds: cols[C.ipEnds],
-      escrow: cols[C.escrow], emdAmount: cols[C.emdAmount],
-      contractPrice: cols[C.contractPrice], marketingPrice: cols[C.marketingPrice],
-      soldPrice: cols[C.soldPrice], fee: cols[C.fee],
-      buyer: cols[C.buyer], supplierName: cols[C.supplierName],
-      supplierType: cols[C.supplierType], split: cols[C.split],
-      notes: cols[C.notes], dispoManager: cols[C.dispoManager],
-      titleCompany: cols[C.titleCompany], titleOfficer: cols[C.titleOfficer],
-      onOffMarket: cols[C.onOffMarket], exclusive: cols[C.exclusive],
-      access: cols[C.access], lockboxCode: cols[C.lockboxCode],
-      occupancy: cols[C.occupancy], additionalNotes: cols[C.additionalNotes],
-      pool: cols[C.pool], sellingPoints: cols[C.sellingPoints],
-      region: cols[C.region], bedrooms: cols[C.bedrooms],
-      bathrooms: cols[C.bathrooms], sqftHome: cols[C.sqftHome],
-      sqftLot: cols[C.sqftLot], yearBuilt: cols[C.yearBuilt],
-    };
+
+    const matches = items.filter(i => i.name.toLowerCase().includes(searchTerm));
+    console.log("Monday matches:", matches.length, matches.map(i => i.name));
+
+    if (matches.length === 0) return { notFound: true };
+    if (matches.length === 1) return itemToDeal(matches[0]);
+    return { deals: matches.map(itemToDeal) };
+
   } catch (e) {
     console.error("Monday getDealContext error:", e.message);
     return null;
