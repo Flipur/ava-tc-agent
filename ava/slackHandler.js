@@ -53,6 +53,7 @@ export async function handleSlackMessage({ event, say, type }) {
         action,
         channel,
         requestedBy: userId,
+        dealContext: context.deal || null,
         createdAt: Date.now(),
       });
 
