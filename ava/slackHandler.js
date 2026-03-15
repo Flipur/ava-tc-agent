@@ -9,14 +9,11 @@ export async function handleSlackMessage({ event, say, type }) {
   const channel = event.channel;
   const ts = event.ts;
 
-  // Strip Ava's bot mention from text
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
   if (!cleanText) return;
 
   try {
-    // Try to pull deal context from Monday.com based on any address in the message
     const dealContext = await getDealContext(cleanText);
-
     const messages = [{ role: "user", content: cleanText }];
     const { text: avaResponse, action } = await askAva(messages, {
       deal: dealContext,
@@ -25,8 +22,8 @@ export async function handleSlackMessage({ event, say, type }) {
     });
 
     if (action && action.requiresApproval) {
-      // Post response and store pending approval keyed to the thread
-      const posted = await say({
+      // Post the approval request
+      await say({
         text: avaResponse,
         thread_ts: ts,
         blocks: [
@@ -38,13 +35,16 @@ export async function handleSlackMessage({ event, say, type }) {
             type: "context",
             elements: [{
               type: "mrkdwn",
-              text: "_Reply *'looks good'* to send, or tell me what to change._",
+              text: "_Reply *looks good* to send, or tell me what to change._",
             }],
           },
         ],
       });
 
-      pendingApprovals.set(posted.ts, {
+      // Key the pending approval to the ORIGINAL message ts (the thread root)
+      // This is what thread replies will have as their thread_ts
+      console.log(`Storing pending approval with key: ${ts}`);
+      pendingApprovals.set(ts, {
         action,
         channel,
         requestedBy: userId,
@@ -52,12 +52,10 @@ export async function handleSlackMessage({ event, say, type }) {
       });
 
     } else if (action && !action.requiresApproval) {
-      // Safe internal action — execute immediately
       await say({ text: avaResponse, thread_ts: ts });
       await executeAction(action);
 
     } else {
-      // Pure text response
       await say({ text: avaResponse, thread_ts: ts });
     }
 
