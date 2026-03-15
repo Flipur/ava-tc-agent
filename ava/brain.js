@@ -17,7 +17,7 @@ const SYSTEM_PROMPT = [
   "Internal updates Monday Close CRM answering questions = requiresApproval false",
   "CRITICAL: Every response MUST end with an action block. No exceptions.",
   "For DocuSign use: <action>{\"type\":\"create_docusign\",\"requiresApproval\":true,\"payload\":{\"signerEmail\":\"EMAIL\",\"signerName\":\"NAME\",\"documentName\":\"Purchase Agreement\",\"emailSubject\":\"SUBJECT\",\"fields\":{}}}</action>",
-  "For email use: <action>{\"type\":\"send_email\",\"requiresApproval\":true,\"payload\":{\"to\":\"EMAIL\",\"subject\":\"SUBJECT\",\"body\":\"BODY\"}}</action>",
+  "For email use: <action>{\"type\":\"send_email\",\"requiresApproval\":true,\"payload\":{\"to\":\"EMAIL\",\"cc\":\"CC_EMAILS\",\"subject\":\"SUBJECT\",\"body\":\"BODY\"}}</action>",
   "For internal only use: <action>{\"type\":\"slack_message\",\"requiresApproval\":false,\"payload\":{}}</action>"
 ].join("\n");
 
