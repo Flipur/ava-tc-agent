@@ -26,15 +26,20 @@ async function pollEmails() {
 }
 
 async function processEmail(email) {
+  const allTo = email.replyTo;
+  const allCc = email.allRecipients.filter(r => r !== email.replyTo).join(", ");
+
   const prompt = [
     "You received an email. Read it and decide what to do.",
     "From: " + email.from,
     "Subject: " + email.subject,
+    "All recipients (Reply All): To=" + allTo + (allCc ? " CC=" + allCc : ""),
     "Body: " + email.body,
     "",
-    "Post a brief 1-2 sentence summary to Slack, then draft a reply if one is needed.",
-    "If no reply is needed (spam, automated, no-reply), just summarize and use slack_message action.",
-    "Keep your Slack summary short — one line max.",
+    "REPLY ALL RULE: When drafting a reply, always reply to ALL recipients unless it is spam, automated, or a no-reply email.",
+    "Use to: " + allTo + " and cc: " + allCc + " in your action payload.",
+    "If no reply needed (spam, automated, no-reply), use slack_message action.",
+    "Keep your Slack summary to one line max.",
   ].join("\n");
 
   const { text: avaResponse, action } = await askAva(
@@ -42,7 +47,6 @@ async function processEmail(email) {
     {}
   );
 
-  // Post clean notification as new message (each email gets its own thread)
   const fromName = email.from.split("<")[0].trim() || email.from;
   const header = "*New email* from *" + fromName + "*\n*Subject:* " + email.subject;
 
@@ -51,7 +55,6 @@ async function processEmail(email) {
     text: header + "\n\n" + avaResponse,
   });
 
-  // Store approval keyed to this message's ts
   if (action && action.requiresApproval) {
     pendingApprovals.set(slackMsg.ts, {
       action,
