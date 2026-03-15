@@ -3,6 +3,21 @@ import jwt from "jsonwebtoken";
 const DOCUSIGN_AUTH_SERVER = "https://account-d.docusign.com";
 const DOCUSIGN_BASE_URL = "https://demo.docusign.net/restapi/v2.1";
 
+// Template library — add new templates here as you create them
+const TEMPLATES = {
+  assignment:       "36c3b300-bbf9-4aa0-8b37-7decaf3433e2", // Flipur Assignment Contract
+  direct_purchase:  "8db27d0c-ab93-4b61-97ba-90de1ae6c365", // Flipur Direct to Seller Purchase Agreement
+  double_close:     "47c21830-910a-4be7-b6d9-fa77a5c9b77d", // Flipur Double Close (B-C) Purchase Agreement
+};
+
+function pickTemplate(documentName = "") {
+  const name = documentName.toLowerCase();
+  if (name.includes("assignment")) return TEMPLATES.assignment;
+  if (name.includes("double close") || name.includes("b-c") || name.includes("bc")) return TEMPLATES.double_close;
+  if (name.includes("direct") || name.includes("purchase") || name.includes("seller")) return TEMPLATES.direct_purchase;
+  return TEMPLATES.assignment; // default fallback
+}
+
 async function getDocuSignToken() {
   const integrationKey = process.env.DOCUSIGN_INTEGRATION_KEY;
   const userId = process.env.DOCUSIGN_USER_ID;
@@ -36,37 +51,32 @@ async function getDocuSignToken() {
 export async function createDocuSignEnvelope({
   signerEmail,
   signerName,
-  documentBase64,
   documentName,
   emailSubject,
+  fields = {},
 }) {
   try {
     const token = await getDocuSignToken();
     const accountId = process.env.DOCUSIGN_ACCOUNT_ID;
+    const templateId = pickTemplate(documentName);
+
+    // Build tab values from deal fields so Ava pre-fills the template
+    const textTabs = Object.entries(fields).map(([tabLabel, value]) => ({
+      tabLabel,
+      value: String(value),
+    }));
 
     const envelope = {
       emailSubject,
-      documents: [{
-        documentBase64,
-        name: documentName,
-        fileExtension: "pdf",
-        documentId: "1",
+      templateId,
+      templateRoles: [{
+        email: signerEmail,
+        name: signerName,
+        roleName: "Signer",
+        tabs: {
+          textTabs,
+        },
       }],
-      recipients: {
-        signers: [{
-          email: signerEmail,
-          name: signerName,
-          recipientId: "1",
-          tabs: {
-            signHereTabs: [{
-              documentId: "1",
-              pageNumber: "1",
-              xPosition: "200",
-              yPosition: "600",
-            }],
-          },
-        }],
-      },
       status: "sent",
     };
 
@@ -80,6 +90,9 @@ export async function createDocuSignEnvelope({
     });
 
     const data = await res.json();
+    console.log("DocuSign response:", JSON.stringify(data));
+
+    if (!data.envelopeId) throw new Error(`DocuSign envelope failed: ${JSON.stringify(data)}`);
     console.log(`DocuSign envelope created: ${data.envelopeId}`);
     return data;
 
@@ -93,14 +106,14 @@ export async function getEnvelopeStatus(envelopeId) {
   try {
     const token = await getDocuSignToken();
     const accountId = process.env.DOCUSIGN_ACCOUNT_ID;
-
     const res = await fetch(`${DOCUSIGN_BASE_URL}/accounts/${accountId}/envelopes/${envelopeId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-
     return res.json();
   } catch (err) {
     console.error("DocuSign getEnvelopeStatus error:", err);
     throw err;
   }
 }
+
+export { TEMPLATES };
