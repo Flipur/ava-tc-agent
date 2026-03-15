@@ -1,24 +1,22 @@
-import { fetchUnreadEmails, sendEmail } from "./gmail.js";
+import { fetchUnreadEmails } from "./gmail.js";
 import { askAva } from "./brain.js";
 import { slackApp } from "../server.js";
 import { pendingApprovals } from "./approvalHandler.js";
 
 const SLACK_CHANNEL = process.env.SLACK_ALERT_CHANNEL || "general";
-const POLL_INTERVAL = 2 * 60 * 1000; // every 2 minutes
+const POLL_INTERVAL = 2 * 60 * 1000;
 
 export function startEmailPoller() {
   console.log("Ava email poller started — checking every 2 minutes");
   setInterval(pollEmails, POLL_INTERVAL);
-  pollEmails(); // run immediately on start
+  pollEmails();
 }
 
 async function pollEmails() {
   try {
     const emails = await fetchUnreadEmails();
     if (!emails.length) return;
-
-    console.log(`Ava found ${emails.length} new email(s)`);
-
+    console.log("Ava found " + emails.length + " new email(s)");
     for (const email of emails) {
       await processEmail(email);
     }
@@ -29,40 +27,32 @@ async function pollEmails() {
 
 async function processEmail(email) {
   const prompt = [
-    "You just received an email. Decide what to do:",
-    "",
+    "You received an email. Read it and decide what to do.",
     "From: " + email.from,
     "Subject: " + email.subject,
     "Body: " + email.body,
     "",
-    "Options:",
-    "1. Draft a reply and request team approval before sending",
-    "2. Alert the team in Slack with a summary if urgent",
-    "3. Both — alert Slack AND draft a reply",
-    "",
-    "Always notify the team in Slack with a brief summary of this email.",
-    "If a reply is needed, draft it and request approval.",
+    "Post a brief 1-2 sentence summary to Slack, then draft a reply if one is needed.",
+    "If no reply is needed (spam, automated, no-reply), just summarize and use slack_message action.",
+    "Keep your Slack summary short — one line max.",
   ].join("\n");
 
   const { text: avaResponse, action } = await askAva(
     [{ role: "user", content: prompt }],
-    { emailContext: email }
+    {}
   );
 
-  // Always post a Slack notification about the incoming email
+  // Post clean notification as new message (each email gets its own thread)
+  const fromName = email.from.split("<")[0].trim() || email.from;
+  const header = "*New email* from *" + fromName + "*\n*Subject:* " + email.subject;
+
   const slackMsg = await slackApp.client.chat.postMessage({
     channel: SLACK_CHANNEL,
-    text: [
-      "*New email received by Ava*",
-      "*From:* " + email.from,
-      "*Subject:* " + email.subject,
-      "",
-      avaResponse,
-    ].join("\n"),
+    text: header + "\n\n" + avaResponse,
   });
 
-  // If Ava wants to send a reply — store as pending approval
-  if (action && action.requiresApproval && action.type === "send_email") {
+  // Store approval keyed to this message's ts
+  if (action && action.requiresApproval) {
     pendingApprovals.set(slackMsg.ts, {
       action,
       channel: SLACK_CHANNEL,
