@@ -41,22 +41,26 @@ const C = {
 };
 
 export async function getDealContext(text) {
-  const m = text.match(/\d+\s+[\w\s]+(?:st|ave|blvd|dr|ln|rd|way|ct|cir|street|avenue|boulevard|drive|lane|road)\b/i);
+  const m = text.match(/\d+\s+[^,\n?]+/);
   if (!m) return null;
-  const address = m[0].trim();
+  const searchTerm = m[0].trim().toLowerCase();
+  console.log("Monday searching for:", searchTerm);
   try {
     const res = await mondayQuery(`query {
       boards(ids: ${BOARD_ID}) {
-        items_page(limit: 5, query_params: {
-          rules: [{ column_id: "name", compare_value: ["${address}"] }]
-        }) {
+        items_page(limit: 200) {
           items { id name column_values { id text value } }
         }
       }
     }`);
     const items = res?.data?.boards?.[0]?.items_page?.items || [];
-    if (!items.length) return null;
-    const item = items[0];
+    console.log("Monday total items:", items.length);
+    const item = items.find(i => i.name.toLowerCase().includes(searchTerm));
+    if (!item) {
+      console.log("Monday: no match for:", searchTerm);
+      return null;
+    }
+    console.log("Monday found:", item.name);
     const cols = {};
     for (const col of item.column_values) cols[col.id] = col.text || col.value || "";
     return {
@@ -90,26 +94,29 @@ export async function getAllActiveDeals() {
   try {
     const res = await mondayQuery(`query {
       boards(ids: ${BOARD_ID}) {
-        items_page(limit: 50, query_params: {
-          rules: [{ column_id: "status", compare_value: ["Active"] }]
-        }) {
+        items_page(limit: 200) {
           items { id name column_values { id text } }
         }
       }
     }`);
     const items = res?.data?.boards?.[0]?.items_page?.items || [];
-    return items.map(item => {
-      const cols = Object.fromEntries(item.column_values.map(c => [c.id, c.text]));
-      return {
-        mondayId: item.id, address: item.name,
-        coe: cols[C.coe], ipEnds: cols[C.ipEnds],
-        emdDue: cols[C.emdDue], nextStep: cols[C.nextStep],
-        requester: cols[C.requester], contractPrice: cols[C.contractPrice],
-        escrow: cols[C.escrow], buyer: cols[C.buyer],
-        status: cols[C.status], region: cols[C.region],
-        dispoManager: cols[C.dispoManager],
-      };
-    });
+    return items
+      .filter(item => {
+        const cols = Object.fromEntries(item.column_values.map(c => [c.id, c.text]));
+        return cols[C.status] === "Active";
+      })
+      .map(item => {
+        const cols = Object.fromEntries(item.column_values.map(c => [c.id, c.text]));
+        return {
+          mondayId: item.id, address: item.name,
+          coe: cols[C.coe], ipEnds: cols[C.ipEnds],
+          emdDue: cols[C.emdDue], nextStep: cols[C.nextStep],
+          requester: cols[C.requester], contractPrice: cols[C.contractPrice],
+          escrow: cols[C.escrow], buyer: cols[C.buyer],
+          status: cols[C.status], region: cols[C.region],
+          dispoManager: cols[C.dispoManager],
+        };
+      });
   } catch (e) {
     console.error("Monday getAllActiveDeals error:", e.message);
     return [];
