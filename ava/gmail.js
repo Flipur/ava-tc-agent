@@ -2,21 +2,19 @@ import { google } from "googleapis";
 
 export async function sendEmail({ to, subject, body, from = "ava@flipur.io" }) {
   try {
-    const rawJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-    if (!rawJson) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON env var is missing");
+    const privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
 
-    let credentials;
-    try {
-      credentials = JSON.parse(rawJson);
-    } catch (e) {
-      throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: " + e.message);
-    }
+    if (!privateKey) throw new Error("GOOGLE_PRIVATE_KEY env var is missing");
+    if (!clientEmail) throw new Error("GOOGLE_CLIENT_EMAIL env var is missing");
 
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ["https://www.googleapis.com/auth/gmail.send"],
-      clientOptions: { subject: from },
-    });
+    const auth = new google.auth.JWT(
+      clientEmail,
+      null,
+      privateKey,
+      ["https://www.googleapis.com/auth/gmail.send"],
+      from
+    );
 
     const gmail = google.gmail({ version: "v1", auth });
     const raw = makeRaw({ to, subject, body, from });
