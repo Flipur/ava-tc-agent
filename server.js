@@ -8,6 +8,16 @@ dotenv.config();
 
 const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
+  endpoints: "/slack/events",
+});
+
+// Handle Slack's URL verification challenge
+receiver.router.use(express.json());
+receiver.router.post("/slack/events", (req, res, next) => {
+  if (req.body?.type === "url_verification") {
+    return res.json({ challenge: req.body.challenge });
+  }
+  next();
 });
 
 export const slackApp = new App({
@@ -15,14 +25,14 @@ export const slackApp = new App({
   receiver,
 });
 
-function isApproval(text = "") {
-  const t = text.toLowerCase();
-  return ["looks good", "approved", "send it", "lgtm", "go ahead", "yes send", "approve"].some(k => t.includes(k));
-}
-
 export function isRejection(text = "") {
   const t = text.toLowerCase();
   return ["reject", "don't send", "hold", "stop", "no don't", "revise", "change"].some(k => t.includes(k));
+}
+
+function isApproval(text = "") {
+  const t = text.toLowerCase();
+  return ["looks good", "approved", "send it", "lgtm", "go ahead", "yes send", "approve"].some(k => t.includes(k));
 }
 
 // Ava responds when mentioned in any channel
@@ -42,8 +52,7 @@ slackApp.message(async ({ message, say }) => {
 });
 
 // Health check so Render knows the service is alive
-const expressApp = receiver.app;
-expressApp.get("/health", (req, res) => res.send("Ava is online."));
+receiver.router.get("/health", (req, res) => res.send("Ava is online."));
 
 const PORT = process.env.PORT || 3000;
 (async () => {
