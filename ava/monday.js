@@ -41,14 +41,19 @@ const C = {
 };
 
 function extractSearchTerm(text) {
+  const t = text.toLowerCase();
+
   const withNumber = text.match(/\d+\s+[^,\n?]+/);
   if (withNumber) return withNumber[0].trim().toLowerCase();
 
   const withStreet = text.match(/(?:on|for|about|at|the)\s+([\w\s]+(?:cir|st|ave|blvd|dr|ln|rd|way|ct|park|glen|hill|lake|ridge|terrace)\b[^,\n?]*)/i);
   if (withStreet) return withStreet[1].trim().toLowerCase();
 
-  const withCity = text.match(/(?:on|for|about|at|the|in)\s+([\w\s]*(?:inglewood|torrance|compton|pasadena|riverside|modesto|sacramento|oakland|emeryville|los angeles|san diego|fresno|bakersfield|hemet|acton|danville|belmont|norwalk|carson|lancaster|downey|barstow|eureka|novato|buena park|mission viejo|fountain valley|huntington beach|san clemente|san marcos|santa monica)\b[^,\n?]*)/i);
-  if (withCity) return withCity[1].trim().toLowerCase();
+  const cities = ["inglewood","torrance","compton","pasadena","riverside","modesto","sacramento","oakland","emeryville","fresno","bakersfield","hemet","acton","danville","belmont","norwalk","carson","lancaster","downey","barstow","eureka","novato","buena park","mission viejo","fountain valley","huntington beach","san clemente","san marcos","santa monica","silver lake","atwater","baldwin hills","leimert park","hyde park","mar vista","westchester","eagle rock","jefferson park","south la","beverly glen","fairfax"];
+
+  for (const city of cities) {
+    if (t.includes(city)) return city;
+  }
 
   return null;
 }
