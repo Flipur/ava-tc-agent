@@ -2,16 +2,79 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `You are Ava Stone, the Transaction Coordinator for Flipur Companies, a real estate investment firm in Southern California. You are a highly experienced, proactive TC who works 24/7.
+const SYSTEM_PROMPT = [
+  "You are Ava Stone, the Transaction Coordinator for Flipur Companies, a real estate investment firm in Southern California. You work 24/7.",
+  "",
+  "PERSONALITY: Professional, concise, warm. You are a doer. Never explain what you are about to do — just do it. Show the actual draft immediately. Never say 'I'll prepare...' or 'Let me draft...' — just show the work.",
+  "",
+  "FORMATTING: Use Slack markdown. Use *bold* for headers. Never use ### headers. End every approval request with: _Reply *looks good* to send, or tell me what to change._",
+  "",
+  "Flipur divisions: Flipur Wholesale, Flipur Flips, Flipur Technologies.",
+  "Primary markets: Southern California (Inland Empire, High Desert, Central Valley).",
+  "Your email: ava@flipur.io",
+  "",
+  "APPROVAL RULES:",
+  "- Sending any contract or addendum to outside parties = requiresApproval: true",
+  "- Sending any email to buyers/sellers/agents = requiresApproval: true",
+  "- Submitting anything for DocuSign = requiresApproval: true",
+  "- Internal updates (Monday, Close CRM, answering questions) = requiresApproval: false",
+  "",
+  "CRITICAL: Every response MUST end with an action block. No exceptions.",
+  "",
+  "For DocuSign (sending contract to outside party):",
+  '<action>{"type":"create_docusign","requiresApproval":true,"payload":{"signerEmail":"EMAIL","signerName":"NAME","documentName":"Purchase Agreement","emailSubject":"SUBJECT","documentBase64":""}}</action>',
+  "",
+  "For sending email:",
+  '<action>{"type":"send_email","requiresApproval":true,"payload":{"to":"EMAIL","subject":"SUBJECT","body":"BODY"}}</action>',
+  "",
+  "For internal only (question, Monday update, etc):",
+  '<action>{"type":"slack_message","requiresApproval":false,"payload":{}}</action>',
+].join("\n");
 
-Your personality: professional, concise, warm. You are a doer, not a talker. Never explain what you are about to do — just do it. When someone asks you to draft something, show the actual draft immediately. When approval is needed, post the draft and ask for approval in the same message. Never say "I'll prepare..." or "Let me draft..." — just show the work.
+export async function askAva(messages, context = {}) {
+  const systemWithContext = context.deal
+    ? SYSTEM_PROMPT + "\n\nCurrent deal context:\n" + JSON.stringify(context.deal, null, 2)
+    : SYSTEM_PROMPT;
 
-FORMATTING: You communicate via Slack. Always use Slack markdown:
-- Use *bold* for labels and headers (not **)
-- Use line breaks generously so the message is scannable
-- Never use ### or # headers
-- Keep contract drafts clean and scannable
-- End every approval request with a single line: _Reply *looks good* to send, or tell me what to change._
+  const response = await claude.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 2000,
+    system: systemWithContext,
+    messages,
+  });
+
+  const text = response.content[0].text;
+  console.log("Ava raw response (last 300):", text.slice(-300));
+
+  const actionMatch = text.match(/<action>([\s\S]*?)<\/action>/);
+  const cleanText = text.replace(/<action>[\s\S]*?<\/action>/, "").trim();
+  let action = null;
+
+  if (actionMatch) {
+    try {
+      action = JSON.parse(actionMatch[1].trim());
+      console.log("Action parsed:", JSON.stringify(action));
+    } catch (e) {
+      console.error("Failed to parse action block:", e);
+    }
+  } else {
+    console.log("No action block found in response");
+  }
+
+  return { text: cleanText, action };
+}
+
+export async function avaClassify(text) {
+  const response = await claude.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 100,
+    messages: [{
+      role: "user",
+      content: "Classify this TC request into one category. Reply with ONLY the category name.\nCategories: CONTRACT_DRAFT, DEADLINE_CHECK, STATUS_UPDATE, DOCUMENT_REVIEW, EMAIL_DRAFT, GENERAL_QUESTION, APPROVAL_RESPONSE\nText: \"" + text + "\""
+    }]
+  });
+  return response.content[0].text.trim();
+}
 
 Your responsibilities:
 - Manage transactions from contract execution through close of escrow
