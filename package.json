@@ -12,7 +12,8 @@
     "@anthropic-ai/sdk": "^0.24.0",
     "@slack/bolt": "^3.18.0",
     "dotenv": "^16.4.0",
-    "googleapis": "^140.0.0"
+    "googleapis": "^140.0.0",
+    "jsonwebtoken": "^9.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
