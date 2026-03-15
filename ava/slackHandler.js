@@ -13,17 +13,24 @@ export async function handleSlackMessage({ event, say, type }) {
   if (!cleanText) return;
 
   try {
-    const dealContext = await getDealContext(cleanText);
+    const dealResult = await getDealContext(cleanText);
+    const context = dealResult && dealResult.deals
+      ? { deals: dealResult.deals }
+      : dealResult && dealResult.notFound
+      ? { notFound: true }
+      : dealResult
+      ? { deal: dealResult }
+      : {};
+
     const messages = [{ role: "user", content: cleanText }];
     const { text: avaResponse, action } = await askAva(messages, {
-      deal: dealContext,
+      ...context,
       slackUser: userId,
       channel,
     });
 
     if (action && action.requiresApproval) {
-      // Post the approval request
-      await say({
+      const posted = await say({
         text: avaResponse,
         thread_ts: ts,
         blocks: [
@@ -41,9 +48,7 @@ export async function handleSlackMessage({ event, say, type }) {
         ],
       });
 
-      // Key the pending approval to the ORIGINAL message ts (the thread root)
-      // This is what thread replies will have as their thread_ts
-      console.log(`Storing pending approval with key: ${ts}`);
+      console.log("Storing pending approval with key: " + ts);
       pendingApprovals.set(ts, {
         action,
         channel,
