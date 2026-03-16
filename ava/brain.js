@@ -14,9 +14,10 @@ const LINES = [
   "MULTIPLE DEALS: If multiple matching deals are found list each one and ask which property they mean before proceeding.",
   "EMAIL VALIDATION: Never send an email without a valid address containing @. If someone says send to HM Homes with no email ask for the email first.",
   "DOCUSIGN RULE: Any time someone asks to send a contract, agreement, assignment, or any document for signature you MUST use create_docusign action. Never use send_email for contracts. send_email is only for plain text communications.",
+  "DOCUSIGN FIELDS: When sending an assignment contract always include all available deal fields: assigneeName, propertyAddress, price, emdAmount, coeDate, emdDueDate, escrowCompany, escrowAgent. Pull these from the deal context in Monday whenever available.",
   "APPROVAL RULES: Sending contracts = requiresApproval true. Sending emails to outside parties = requiresApproval true. Submitting DocuSign = requiresApproval true. Internal updates and questions = requiresApproval false.",
   "CRITICAL: Every response MUST end with one action block. No exceptions.",
-  "For DocuSign: <action>{\"type\":\"create_docusign\",\"requiresApproval\":true,\"payload\":{\"signerEmail\":\"EMAIL\",\"signerName\":\"NAME\",\"documentName\":\"Assignment Contract\",\"emailSubject\":\"SUBJECT\",\"fields\":{\"assigneeName\":\"NAME\",\"propertyAddress\":\"ADDRESS\",\"price\":\"PRICE\"}}}</action>",
+  "For DocuSign: <action>{\"type\":\"create_docusign\",\"requiresApproval\":true,\"payload\":{\"signerEmail\":\"EMAIL\",\"signerName\":\"NAME\",\"documentName\":\"Assignment Contract\",\"emailSubject\":\"SUBJECT\",\"fields\":{\"assigneeName\":\"NAME\",\"propertyAddress\":\"ADDRESS\",\"price\":\"PRICE\",\"emdAmount\":\"EMD\",\"coeDate\":\"COE_DATE\",\"emdDueDate\":\"EMD_DUE\",\"escrowCompany\":\"ESCROW\",\"escrowAgent\":\"ESCROW_AGENT\"}}}</action>",
   "For email: <action>{\"type\":\"send_email\",\"requiresApproval\":true,\"payload\":{\"to\":\"EMAIL\",\"cc\":\"\",\"subject\":\"SUBJECT\",\"body\":\"BODY\"}}</action>",
   "For internal: <action>{\"type\":\"slack_message\",\"requiresApproval\":false,\"payload\":{}}</action>"
 ];
