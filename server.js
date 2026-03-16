@@ -40,12 +40,11 @@ function isDuplicate(eventId) {
   if (!eventId) return false;
   if (processedEvents.has(eventId)) return true;
   processedEvents.add(eventId);
-  // Clean up after 5 minutes to prevent memory leak
   setTimeout(() => processedEvents.delete(eventId), 5 * 60 * 1000);
   return false;
 }
 
-// Single unified message handler — handles ALL messages including mentions
+// Single unified message handler
 slackApp.message(async ({ message, say }) => {
   if (!message.text || message.subtype) return;
   if (isDuplicate(message.event_ts || message.ts)) return;
@@ -62,9 +61,9 @@ slackApp.message(async ({ message, say }) => {
     }
   }
 
-  // Only respond to @mentions in channels, or any message in DMs
+  // Respond to @mentions in channels, or any message in DMs (1-on-1 and group)
   const isMention = message.text.includes(`<@${process.env.SLACK_BOT_USER_ID}>`);
-  const isDM = message.channel_type === "im";
+  const isDM = message.channel_type === "im" || message.channel_type === "mpim";
 
   if (isMention || isDM) {
     await handleSlackMessage({ event: message, say, type: isDM ? "dm" : "mention" });
