@@ -16,60 +16,55 @@ function pickTemplate(documentName) {
   return { id: TEMPLATES.direct_purchase, type: "direct_purchase" };
 }
 
-function buildTabs(type, fields) {
-  const maps = {
-    assignment: {
-      assigneeName:    "Assignee Entity/Name**",
-      buyerName:       "Assignee Entity/Name**",
-      propertyAddress: "Property Address**",
-      escrowCompany:   "Escrow Company**",
-      escrowAgent:     "Escrow Agent**",
-      price:           "Price**",
-      purchasePrice:   "Price**",
-      coeDate:         "COE Date**",
-      closingDate:     "COE Date**",
-      emdAmount:       "EMD Amount**",
-      emdTime:         "Time**",
-      emdDueDate:      "EMD Due Date**",
-      buyerEntity:     "Buyer Entity**",
-      fullName:        "Full Name",
-    },
-    direct_purchase: {
-      sellerName:      "Full Name",
-      sellerEmail:     "Seller email",
-      sellerAddress:   "Mailing Address",
-      sellerPhone:     "Text",
-      propertyAddress: "Property Address",
-      purchasePrice:   "Purchase Price",
-      price:           "Purchase Price",
-      emdAmount:       "EMD",
-      coeDate:         "COE days",
-      closingDate:     "COE days",
-      inspectionDays:  "Tex",
-    },
-    double_close: {
-      buyerName:       "Text",
-      buyerFullName:   "Full Name",
-      propertyAddress: "Property Address",
-      purchasePrice:   "Purchase Price",
-      price:           "Purchase Price",
-      emdAmount:       "EMD",
-      coeDate:         "COE days",
-      closingDate:     "COE days",
-      inspectionDays:  "Text",
-    },
-  };
-
-  const map = maps[type] || maps.direct_purchase;
+function buildAssignmentTabs(fields) {
+  // Tab labels must match exactly what's in the DocuSign template
   const textTabs = [];
-  const seen = new Set();
-  for (const [key, value] of Object.entries(fields || {})) {
-    const tabLabel = map[key] || key;
-    if (value && !seen.has(tabLabel)) {
-      textTabs.push({ tabLabel, value: String(value) });
-      seen.add(tabLabel);
-    }
-  }
+  const f = fields || {};
+
+  if (f.assigneeName)    textTabs.push({ tabLabel: "Assignee Entity/Name**", value: f.assigneeName });
+  if (f.propertyAddress) textTabs.push({ tabLabel: "Property Address**",     value: f.propertyAddress });
+  if (f.escrowCompany)   textTabs.push({ tabLabel: "Escrow Company**",        value: f.escrowCompany });
+  if (f.escrowAgent)     textTabs.push({ tabLabel: "Escrow Agent**",          value: f.escrowAgent });
+  if (f.price)           textTabs.push({ tabLabel: "Price**",                 value: f.price });
+  if (f.coeDate)         textTabs.push({ tabLabel: "COE Date**",              value: f.coeDate });
+  if (f.emdAmount)       textTabs.push({ tabLabel: "EMD Amount**",            value: f.emdAmount });
+  if (f.emdTime)         textTabs.push({ tabLabel: "Time**",                  value: f.emdTime });
+  if (f.emdDueDate)      textTabs.push({ tabLabel: "EMD Due Date**",          value: f.emdDueDate });
+  if (f.buyerEntity)     textTabs.push({ tabLabel: "Buyer Entity**",          value: f.buyerEntity });
+  if (f.fullName)        textTabs.push({ tabLabel: "Full Name",               value: f.fullName });
+
+  return { textTabs };
+}
+
+function buildDirectPurchaseTabs(fields) {
+  const textTabs = [];
+  const f = fields || {};
+
+  if (f.sellerName)      textTabs.push({ tabLabel: "Full Name",        value: f.sellerName });
+  if (f.sellerEmail)     textTabs.push({ tabLabel: "Seller email",     value: f.sellerEmail });
+  if (f.sellerAddress)   textTabs.push({ tabLabel: "Mailing Address",  value: f.sellerAddress });
+  if (f.sellerPhone)     textTabs.push({ tabLabel: "Text",             value: f.sellerPhone });
+  if (f.propertyAddress) textTabs.push({ tabLabel: "Property Address", value: f.propertyAddress });
+  if (f.price || f.purchasePrice) textTabs.push({ tabLabel: "Purchase Price", value: f.price || f.purchasePrice });
+  if (f.emdAmount)       textTabs.push({ tabLabel: "EMD",              value: f.emdAmount });
+  if (f.coeDate)         textTabs.push({ tabLabel: "COE days",         value: f.coeDate });
+  if (f.inspectionDays)  textTabs.push({ tabLabel: "Tex",              value: f.inspectionDays });
+
+  return { textTabs };
+}
+
+function buildDoubleCloseTabs(fields) {
+  const textTabs = [];
+  const f = fields || {};
+
+  if (f.buyerName)       textTabs.push({ tabLabel: "Text",             value: f.buyerName });
+  if (f.buyerFullName || f.buyerName) textTabs.push({ tabLabel: "Full Name", value: f.buyerFullName || f.buyerName });
+  if (f.propertyAddress) textTabs.push({ tabLabel: "Property Address", value: f.propertyAddress });
+  if (f.price || f.purchasePrice) textTabs.push({ tabLabel: "Purchase Price", value: f.price || f.purchasePrice });
+  if (f.emdAmount)       textTabs.push({ tabLabel: "EMD",              value: f.emdAmount });
+  if (f.coeDate)         textTabs.push({ tabLabel: "COE days",         value: f.coeDate });
+  if (f.inspectionDays)  textTabs.push({ tabLabel: "Text",             value: f.inspectionDays });
+
   return { textTabs };
 }
 
@@ -108,15 +103,49 @@ export async function createDocuSignEnvelope({ signerEmail, signerName, document
   const accountId = process.env.DOCUSIGN_ACCOUNT_ID;
   const { id: templateId, type } = pickTemplate(documentName);
 
+  let templateRoles;
+
+  if (type === "assignment") {
+    // Two roles: Assignor (Flipur — pre-filled in template) and Assignee (the buyer)
+    templateRoles = [
+      {
+        email: "team@flipur.io",
+        name: "Flipur Inc",
+        roleName: "Assignor",
+        // Assignor fields are pre-filled in the template — no tabs needed
+      },
+      {
+        email: signerEmail,
+        name: signerName,
+        roleName: "Assignee",
+        tabs: buildAssignmentTabs(fields),
+      },
+    ];
+  } else if (type === "double_close") {
+    templateRoles = [
+      {
+        email: signerEmail,
+        name: signerName,
+        roleName: "Buyer",
+        tabs: buildDoubleCloseTabs(fields),
+      },
+    ];
+  } else {
+    // direct_purchase
+    templateRoles = [
+      {
+        email: signerEmail,
+        name: signerName,
+        roleName: "Seller",
+        tabs: buildDirectPurchaseTabs(fields),
+      },
+    ];
+  }
+
   const envelope = {
     emailSubject,
     templateId,
-    templateRoles: [{
-      email: signerEmail,
-      name: signerName,
-      roleName: "Signer",
-      tabs: buildTabs(type, fields),
-    }],
+    templateRoles,
     status: "sent",
   };
 
