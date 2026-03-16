@@ -17,21 +17,56 @@ function pickTemplate(documentName) {
 }
 
 function buildAssignmentTabs(fields) {
-  // Tab labels must match exactly what's in the DocuSign template
-  const textTabs = [];
   const f = fields || {};
+  const textTabs = [];
 
-  if (f.assigneeName)    textTabs.push({ tabLabel: "Assignee Entity/Name**", value: f.assigneeName });
-  if (f.propertyAddress) textTabs.push({ tabLabel: "Property Address**",     value: f.propertyAddress });
-  if (f.escrowCompany)   textTabs.push({ tabLabel: "Escrow Company**",        value: f.escrowCompany });
-  if (f.escrowAgent)     textTabs.push({ tabLabel: "Escrow Agent**",          value: f.escrowAgent });
-  if (f.price)           textTabs.push({ tabLabel: "Price**",                 value: f.price });
-  if (f.coeDate)         textTabs.push({ tabLabel: "COE Date**",              value: f.coeDate });
-  if (f.emdAmount)       textTabs.push({ tabLabel: "EMD Amount**",            value: f.emdAmount });
-  if (f.emdTime)         textTabs.push({ tabLabel: "Time**",                  value: f.emdTime });
-  if (f.emdDueDate)      textTabs.push({ tabLabel: "EMD Due Date**",          value: f.emdDueDate });
-  if (f.buyerEntity)     textTabs.push({ tabLabel: "Buyer Entity**",          value: f.buyerEntity });
-  if (f.fullName)        textTabs.push({ tabLabel: "Full Name",               value: f.fullName });
+  // UUID-based tab labels from DocuSign API — Assignor role fills all data fields
+  // Page 1 fields
+  if (f.propertyAddress) {
+    textTabs.push({ tabLabel: "Text b7e171e1-1a3b-4378-8e62-ca6ffd64c173", value: f.propertyAddress }); // Property Address p1 y90
+    textTabs.push({ tabLabel: "Text 30668664-1b72-41f8-bce0-883b900ae306", value: f.propertyAddress }); // Property Address p1 y96
+    textTabs.push({ tabLabel: "Text 5b912215-d2a1-4308-9464-8ad8003d0354", value: f.propertyAddress }); // Property Address p1 y195
+  }
+  if (f.assigneeName) {
+    textTabs.push({ tabLabel: "Text f2cd4618-1150-4ef2-882e-53848eb3ed34", value: f.assigneeName }); // Assignee Entity/Name p1 y182
+    textTabs.push({ tabLabel: "Text c157022d-b4a7-4149-a828-d2f336a830af", value: f.assigneeName }); // Assignee Entity/Name p1 y107
+    textTabs.push({ tabLabel: "Text 7b185439-b773-4d40-adc4-1c0100ccaa28", value: f.assigneeName }); // Assignee Entity/Name p1 y281
+    textTabs.push({ tabLabel: "Text f3bee701-c23c-4c15-9de3-2ec6cb04e4cf", value: f.assigneeName }); // Assignee Entity/Name p1 y593
+  }
+  if (f.escrowCompany) {
+    textTabs.push({ tabLabel: "Text d0c43fdf-6732-4757-9d32-34ac3a58a5a4", value: f.escrowCompany }); // Escrow Company p1 y209
+    textTabs.push({ tabLabel: "Text 8a5c69ec-a0a3-4674-a6d8-ed425ab2e604", value: f.escrowCompany }); // Escrow Company p1 y672
+  }
+  if (f.escrowAgent) {
+    textTabs.push({ tabLabel: "Text e1168ff3-5d7b-4214-b294-5ece445af867", value: f.escrowAgent }); // Escrow Agent p1 y221
+  }
+  if (f.price) {
+    textTabs.push({ tabLabel: "Text b1773cc8-ecf0-4642-bb23-ed137c29a27d", value: f.price }); // Price p1 y235
+    textTabs.push({ tabLabel: "Text 97505617-d983-4b0d-89e3-e4540de95eec", value: f.price }); // Price p1 y460
+  }
+  if (f.coeDate) {
+    textTabs.push({ tabLabel: "Text 7bec216c-bd2e-48b3-8921-9a89089ddcd7", value: f.coeDate }); // COE Date p1 y301
+  }
+  if (f.emdAmount) {
+    textTabs.push({ tabLabel: "Text 1b77e2fb-8de1-4598-8106-98eddb054406", value: f.emdAmount }); // EMD Amount p1 y367
+  }
+  if (f.emdTime) {
+    textTabs.push({ tabLabel: "Text 5fdc4b30-5e25-4bbb-a5ee-8e10ee535a53", value: f.emdTime }); // Time p1 y367
+  }
+  if (f.emdDueDate) {
+    textTabs.push({ tabLabel: "Text 524c1743-5e3f-45e2-9c12-bfb8b20a745d", value: f.emdDueDate }); // EMD Due Date p1 y380
+  }
+
+  // Page 2 fields
+  if (f.assigneeName) {
+    textTabs.push({ tabLabel: "Text 84ec4a97-b4da-4fac-8a93-f6dd3d1581b6", value: f.assigneeName }); // Assignee Entity/Name p2 y220
+  }
+  if (f.escrowCompany) {
+    textTabs.push({ tabLabel: "Text dce2bf8b-b150-40a1-ad11-a7b4ced221e0", value: f.escrowCompany }); // Escrow Company p2 y82
+  }
+  if (f.buyerEntity || f.assigneeName) {
+    textTabs.push({ tabLabel: "Text 1741a6f9-d256-4d46-b4b4-c268fd0a962f", value: f.buyerEntity || f.assigneeName }); // Buyer Entity p2 y633
+  }
 
   return { textTabs };
 }
@@ -39,7 +74,6 @@ function buildAssignmentTabs(fields) {
 function buildDirectPurchaseTabs(fields) {
   const textTabs = [];
   const f = fields || {};
-
   if (f.sellerName)      textTabs.push({ tabLabel: "Full Name",        value: f.sellerName });
   if (f.sellerEmail)     textTabs.push({ tabLabel: "Seller email",     value: f.sellerEmail });
   if (f.sellerAddress)   textTabs.push({ tabLabel: "Mailing Address",  value: f.sellerAddress });
@@ -49,14 +83,12 @@ function buildDirectPurchaseTabs(fields) {
   if (f.emdAmount)       textTabs.push({ tabLabel: "EMD",              value: f.emdAmount });
   if (f.coeDate)         textTabs.push({ tabLabel: "COE days",         value: f.coeDate });
   if (f.inspectionDays)  textTabs.push({ tabLabel: "Tex",              value: f.inspectionDays });
-
   return { textTabs };
 }
 
 function buildDoubleCloseTabs(fields) {
   const textTabs = [];
   const f = fields || {};
-
   if (f.buyerName)       textTabs.push({ tabLabel: "Text",             value: f.buyerName });
   if (f.buyerFullName || f.buyerName) textTabs.push({ tabLabel: "Full Name", value: f.buyerFullName || f.buyerName });
   if (f.propertyAddress) textTabs.push({ tabLabel: "Property Address", value: f.propertyAddress });
@@ -64,7 +96,6 @@ function buildDoubleCloseTabs(fields) {
   if (f.emdAmount)       textTabs.push({ tabLabel: "EMD",              value: f.emdAmount });
   if (f.coeDate)         textTabs.push({ tabLabel: "COE days",         value: f.coeDate });
   if (f.inspectionDays)  textTabs.push({ tabLabel: "Text",             value: f.inspectionDays });
-
   return { textTabs };
 }
 
@@ -106,19 +137,17 @@ export async function createDocuSignEnvelope({ signerEmail, signerName, document
   let templateRoles;
 
   if (type === "assignment") {
-    // Two roles: Assignor (Flipur — pre-filled in template) and Assignee (the buyer)
     templateRoles = [
       {
         email: "team@flipur.io",
         name: "Flipur Inc",
         roleName: "Assignor",
-        // Assignor fields are pre-filled in the template — no tabs needed
+        tabs: buildAssignmentTabs(fields),
       },
       {
         email: signerEmail,
         name: signerName,
         roleName: "Assignee",
-        tabs: buildAssignmentTabs(fields),
       },
     ];
   } else if (type === "double_close") {
@@ -131,7 +160,6 @@ export async function createDocuSignEnvelope({ signerEmail, signerName, document
       },
     ];
   } else {
-    // direct_purchase
     templateRoles = [
       {
         email: signerEmail,
