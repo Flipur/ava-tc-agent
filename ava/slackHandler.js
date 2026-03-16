@@ -2,18 +2,48 @@ import { askAva } from "./brain.js";
 import { executeAction } from "./actionExecutor.js";
 import { getDealContext } from "./monday.js";
 import { pendingApprovals } from "./approvalHandler.js";
+import { slackApp } from "../server.js";
 
 export async function handleSlackMessage({ event, say, type }) {
   const text = event.text || "";
   const userId = event.user;
   const channel = event.channel;
   const ts = event.ts;
+  const threadTs = event.thread_ts;
 
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
   if (!cleanText) return;
 
   try {
-    const dealResult = await getDealContext(cleanText);
+    // Build conversation history from thread if this is a reply
+    let messages = [];
+    if (threadTs) {
+      try {
+        const history = await slackApp.client.conversations.replies({
+          channel,
+          ts: threadTs,
+          limit: 20,
+        });
+        for (const msg of history.messages || []) {
+          const msgText = (msg.text || "").replace(/<@[A-Z0-9]+>/g, "").trim();
+          if (!msgText) continue;
+          const isAva = msg.app_id || msg.bot_id;
+          messages.push({
+            role: isAva ? "assistant" : "user",
+            content: msgText,
+          });
+        }
+      } catch (e) {
+        console.error("Failed to fetch thread history:", e.message);
+        messages = [{ role: "user", content: cleanText }];
+      }
+    } else {
+      messages = [{ role: "user", content: cleanText }];
+    }
+
+    // Search for deal context across all messages in thread
+    const fullThreadText = messages.map(m => m.content).join(" ");
+    const dealResult = await getDealContext(fullThreadText);
     const context = dealResult && dealResult.deals
       ? { deals: dealResult.deals }
       : dealResult && dealResult.notFound
@@ -22,7 +52,6 @@ export async function handleSlackMessage({ event, say, type }) {
       ? { deal: dealResult }
       : {};
 
-    const messages = [{ role: "user", content: cleanText }];
     const { text: avaResponse, action } = await askAva(messages, {
       ...context,
       slackUser: userId,
