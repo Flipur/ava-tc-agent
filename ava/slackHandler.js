@@ -1,7 +1,7 @@
 import { askAva } from "./brain.js";
 import { executeAction } from "./actionExecutor.js";
 import { getDealContext } from "./monday.js";
-import { pendingApprovals } from "./approvalHandler.js";
+import { pendingApprovals, handleApproval } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
 
 export async function handleSlackMessage({ event, say, type }) {
@@ -12,6 +12,12 @@ export async function handleSlackMessage({ event, say, type }) {
   const threadTs = event.thread_ts;
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
   if (!cleanText) return;
+
+  // If this is a thread reply and there's a pending approval, route to approval handler
+  if (threadTs && pendingApprovals.has(threadTs)) {
+    await handleApproval({ message: { ...event, text: cleanText }, say });
+    return;
+  }
 
   try {
     let messages = [];
@@ -54,7 +60,6 @@ export async function handleSlackMessage({ event, say, type }) {
     });
 
     if (action && action.requiresApproval) {
-      // Post Ava's response as a new message in the thread
       await say({
         text: avaResponse,
         thread_ts: threadTs || ts,
@@ -67,7 +72,6 @@ export async function handleSlackMessage({ event, say, type }) {
         ],
       });
 
-      // Store under the ROOT thread ts so all replies in this thread find it
       const approvalKey = threadTs || ts;
       console.log("Storing pending approval with key: " + approvalKey);
       pendingApprovals.set(approvalKey, {
