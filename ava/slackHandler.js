@@ -10,12 +10,10 @@ export async function handleSlackMessage({ event, say, type }) {
   const channel = event.channel;
   const ts = event.ts;
   const threadTs = event.thread_ts;
-
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
   if (!cleanText) return;
 
   try {
-    // Build conversation history from thread if this is a reply
     let messages = [];
     if (threadTs) {
       try {
@@ -28,10 +26,7 @@ export async function handleSlackMessage({ event, say, type }) {
           const msgText = (msg.text || "").replace(/<@[A-Z0-9]+>/g, "").trim();
           if (!msgText) continue;
           const isAva = msg.app_id || msg.bot_id;
-          messages.push({
-            role: isAva ? "assistant" : "user",
-            content: msgText,
-          });
+          messages.push({ role: isAva ? "assistant" : "user", content: msgText });
         }
       } catch (e) {
         console.error("Failed to fetch thread history:", e.message);
@@ -41,16 +36,16 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    // Search for deal context across all messages in thread
-    const fullThreadText = messages.map(m => m.content).join(" ");
+    const fullThreadText = messages.map((m) => m.content).join(" ");
     const dealResult = await getDealContext(fullThreadText);
-    const context = dealResult && dealResult.deals
-      ? { deals: dealResult.deals }
-      : dealResult && dealResult.notFound
-      ? { notFound: true }
-      : dealResult
-      ? { deal: dealResult }
-      : {};
+    const context =
+      dealResult && dealResult.deals
+        ? { deals: dealResult.deals }
+        : dealResult && dealResult.notFound
+        ? { notFound: true }
+        : dealResult
+        ? { deal: dealResult }
+        : {};
 
     const { text: avaResponse, action } = await askAva(messages, {
       ...context,
@@ -59,46 +54,40 @@ export async function handleSlackMessage({ event, say, type }) {
     });
 
     if (action && action.requiresApproval) {
-      const posted = await say({
+      // Post Ava's response as a new message in the thread
+      await say({
         text: avaResponse,
-        thread_ts: ts,
+        thread_ts: threadTs || ts,
         blocks: [
-          {
-            type: "section",
-            text: { type: "mrkdwn", text: avaResponse },
-          },
+          { type: "section", text: { type: "mrkdwn", text: avaResponse } },
           {
             type: "context",
-            elements: [{
-              type: "mrkdwn",
-              text: "_Reply *looks good* to send, or tell me what to change._",
-            }],
+            elements: [{ type: "mrkdwn", text: "_Reply *looks good* to send, or tell me what to change._" }],
           },
         ],
       });
 
-      console.log("Storing pending approval with key: " + ts);
-      pendingApprovals.set(ts, {
+      // Store under the ROOT thread ts so all replies in this thread find it
+      const approvalKey = threadTs || ts;
+      console.log("Storing pending approval with key: " + approvalKey);
+      pendingApprovals.set(approvalKey, {
         action,
         channel,
         requestedBy: userId,
         dealContext: context.deal || null,
         createdAt: Date.now(),
       });
-
     } else if (action && !action.requiresApproval) {
-      await say({ text: avaResponse, thread_ts: ts });
+      await say({ text: avaResponse, thread_ts: threadTs || ts });
       await executeAction(action);
-
     } else {
-      await say({ text: avaResponse, thread_ts: ts });
+      await say({ text: avaResponse, thread_ts: threadTs || ts });
     }
-
   } catch (err) {
     console.error("Ava slackHandler error:", err);
     await say({
       text: "Hit an error on my end. Let me know if you need me to retry.",
-      thread_ts: ts,
+      thread_ts: threadTs || ts,
     });
   }
 }
