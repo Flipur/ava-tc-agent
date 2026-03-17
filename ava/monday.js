@@ -1,6 +1,8 @@
 const MONDAY_API = "https://api.monday.com/v2";
 const BOARD_ID = process.env.MONDAY_BOARD_ID;
 
+const ALL_GROUPS = ["topics", "group_title", "new_group_mkmpnj2k", "new_group__1", "group_mkzmxp5x", "new_group30621__1"];
+
 const C = {
   requester:          "dropdown47__1",
   status:             "status",
@@ -49,7 +51,7 @@ function extractSearchTerm(text) {
   const withStreet = text.match(/(?:on|for|about|at|the)\s+([\w\s]+(?:cir|st|ave|blvd|dr|ln|rd|way|ct|park|glen|hill|lake|ridge|terrace)\b[^,\n?]*)/i);
   if (withStreet) return withStreet[1].trim().toLowerCase();
 
-  const cities = ["inglewood","torrance","compton","pasadena","riverside","modesto","sacramento","oakland","emeryville","fresno","bakersfield","hemet","acton","danville","belmont","norwalk","carson","lancaster","downey","barstow","eureka","novato","buena park","mission viejo","fountain valley","huntington beach","san clemente","san marcos","santa monica","silver lake","atwater","baldwin hills","leimert park","hyde park","mar vista","westchester","eagle rock","jefferson park","south la","beverly glen","fairfax"];
+  const cities = ["inglewood","torrance","compton","pasadena","riverside","modesto","sacramento","oakland","emeryville","fresno","bakersfield","hemet","acton","danville","belmont","norwalk","carson","lancaster","downey","barstow","eureka","novato","buena park","mission viejo","fountain valley","huntington beach","san clemente","san marcos","santa monica","silver lake","atwater","baldwin hills","leimert park","hyde park","mar vista","westchester","eagle rock","jefferson park","south la","beverly glen","fairfax","redondo beach","acton","spa"];
 
   for (const city of cities) {
     if (t.includes(city)) return city;
@@ -84,21 +86,38 @@ function itemToDeal(item) {
   };
 }
 
+async function fetchAllItems() {
+  // Fetch from all groups by querying each group separately
+  const allItems = [];
+
+  for (const groupId of ALL_GROUPS) {
+    try {
+      const res = await mondayQuery(`query {
+        boards(ids: ${BOARD_ID}) {
+          groups(ids: "${groupId}") {
+            items_page(limit: 200) {
+              items { id name column_values { id text value } }
+            }
+          }
+        }
+      }`);
+      const items = res?.data?.boards?.[0]?.groups?.[0]?.items_page?.items || [];
+      allItems.push(...items);
+    } catch (e) {
+      console.error("Monday fetchAllItems error for group", groupId, e.message);
+    }
+  }
+
+  return allItems;
+}
+
 export async function getDealContext(text) {
   const searchTerm = extractSearchTerm(text);
   if (!searchTerm) return null;
   console.log("Monday searching for:", searchTerm);
 
   try {
-    const res = await mondayQuery(`query {
-      boards(ids: ${BOARD_ID}) {
-        items_page(limit: 200) {
-          items { id name column_values { id text value } }
-        }
-      }
-    }`);
-
-    const items = res?.data?.boards?.[0]?.items_page?.items || [];
+    const items = await fetchAllItems();
     console.log("Monday total items:", items.length);
 
     const matches = items.filter(i => i.name.toLowerCase().includes(searchTerm));
@@ -118,12 +137,14 @@ export async function getAllActiveDeals() {
   try {
     const res = await mondayQuery(`query {
       boards(ids: ${BOARD_ID}) {
-        items_page(limit: 200) {
-          items { id name column_values { id text } }
+        groups(ids: "topics") {
+          items_page(limit: 200) {
+            items { id name column_values { id text } }
+          }
         }
       }
     }`);
-    const items = res?.data?.boards?.[0]?.items_page?.items || [];
+    const items = res?.data?.boards?.[0]?.groups?.[0]?.items_page?.items || [];
     return items
       .filter(item => {
         const cols = Object.fromEntries(item.column_values.map(c => [c.id, c.text]));
@@ -160,7 +181,7 @@ export async function createMondayItem({ dealAddress, groupId, columnValues }) {
   const vals = JSON.stringify(JSON.stringify(columnValues));
   return mondayQuery(`mutation {
     create_item(
-      board_id: ${BOARD_ID}, group_id: "${groupId || "active"}",
+      board_id: ${BOARD_ID}, group_id: "${groupId || "topics"}",
       item_name: "${dealAddress}", column_values: ${vals}
     ) { id }
   }`);
