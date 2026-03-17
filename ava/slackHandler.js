@@ -1,23 +1,31 @@
-import { askAva } from "./brain.js";
+function extractAddressFromChannelName(channelName) {
+  if (!channelName) return null;
+  const match = channelName.match(/^(\d+)-(.+)/);
+  if (!match) return null;
+  // Convert hyphens to spaces and strip trailing -usa
+  const full = channelName.replace(/-usa$/, "").replace(/-/g, " ").trim();
+  // Only use first 3 words (number + street name + street type) to avoid city/state mismatches
+  const parts = full.split(" ");
+  const shortAddress = parts.slice(0, 3).join(" ");
+  return shortAddress;
+}
+This turns 4331-melbourne-ave-los-feliz into 4331 melbourne ave which will match 4331 Melbourne Ave, Los Angeles, CA 90027 (Los Feliz) in Monday.
+Want the full slackHandler.js or just confirm this one function change?Yes8:47 AMjavascriptimport { askAva } from "./brain.js";
 import { executeAction } from "./actionExecutor.js";
 import { getDealContext } from "./monday.js";
 import { pendingApprovals, handleApproval } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
 
-// Detect if a channel name looks like a property address
-// e.g. "172-lawnview-cir-danville-ca-94526-usa"
 function extractAddressFromChannelName(channelName) {
   if (!channelName) return null;
-  // Channel names use hyphens instead of spaces
-  // Property channels start with a street number
   const match = channelName.match(/^(\d+)-(.+)/);
   if (!match) return null;
-  // Convert hyphens back to spaces, remove trailing -usa if present
-  const address = channelName
-    .replace(/-usa$/, "")
-    .replace(/-/g, " ")
-    .trim();
-  return address;
+  // Convert hyphens to spaces and strip trailing -usa
+  const full = channelName.replace(/-usa$/, "").replace(/-/g, " ").trim();
+  // Only use first 3 words (number + street name + street type) to avoid city/state mismatches
+  const parts = full.split(" ");
+  const shortAddress = parts.slice(0, 3).join(" ");
+  return shortAddress;
 }
 
 async function getChannelName(channelId) {
@@ -68,7 +76,7 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    // Check if this is a property channel — if so use channel name as deal lookup
+    // Check if this is a property channel — use channel name as deal lookup
     let dealResult = null;
     const channelName = await getChannelName(channel);
     const channelAddress = extractAddressFromChannelName(channelName);
@@ -78,7 +86,7 @@ export async function handleSlackMessage({ event, say, type }) {
       dealResult = await getDealContext(channelAddress);
     }
 
-    // If no property channel match, fall back to searching message text
+    // Fall back to searching message text if channel lookup fails
     if (!dealResult || dealResult.notFound) {
       const fullThreadText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
       dealResult = await getDealContext(fullThreadText);
@@ -93,7 +101,6 @@ export async function handleSlackMessage({ event, say, type }) {
         ? { deal: dealResult }
         : {};
 
-    // If in a property channel with a loaded deal, add channel context to system
     const channelContext = channelAddress && context.deal
       ? { ...context, propertyChannel: channelName, autoLoadedAddress: channelAddress }
       : context;
