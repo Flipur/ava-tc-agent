@@ -61,8 +61,9 @@ slackApp.message(async ({ message, say }) => {
 
   const isMention = message.text.includes(`<@${process.env.SLACK_BOT_USER_ID}>`);
   const isDM = message.channel_type === "im" || message.channel_type === "mpim";
+  const isThreadReply = !!threadTs;
 
-  if (isMention || isDM) {
+  if (isMention || isDM || isThreadReply) {
     await handleSlackMessage({ event: message, say, type: isDM ? "dm" : "mention" });
   }
 });
