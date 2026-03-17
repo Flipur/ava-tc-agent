@@ -1,5 +1,6 @@
+import pkg from "@slack/bolt";
+const { App, ExpressReceiver } = pkg;
 import express from "express";
-import { App, ExpressReceiver } from "@slack/bolt";
 import dotenv from "dotenv";
 import { handleSlackMessage } from "./ava/slackHandler.js";
 import { handleApproval, pendingApprovals } from "./ava/approvalHandler.js";
@@ -34,7 +35,6 @@ export function isApproval(text) {
   return ["looks good", "approved", "send it", "lgtm", "go ahead", "yes send", "approve", "yes", "do it", "confirmed", "confirm", "ok send", "send"].some(k => t.includes(k));
 }
 
-// Deduplication — track recently processed event IDs
 const processedEvents = new Set();
 function isDuplicate(eventId) {
   if (!eventId) return false;
@@ -44,14 +44,12 @@ function isDuplicate(eventId) {
   return false;
 }
 
-// Single unified message handler
 slackApp.message(async ({ message, say }) => {
   if (!message.text || message.subtype) return;
   if (isDuplicate(message.event_ts || message.ts)) return;
 
   const threadTs = message.thread_ts;
 
-  // Thread reply — check for pending approval first
   if (threadTs) {
     const hasPending = pendingApprovals.has(threadTs);
     console.log("Thread reply detected. thread_ts: " + threadTs + ", hasPending: " + hasPending + ", text: " + message.text);
@@ -61,7 +59,6 @@ slackApp.message(async ({ message, say }) => {
     }
   }
 
-  // Respond to @mentions in channels, or any message in DMs (1-on-1 and group)
   const isMention = message.text.includes(`<@${process.env.SLACK_BOT_USER_ID}>`);
   const isDM = message.channel_type === "im" || message.channel_type === "mpim";
 
