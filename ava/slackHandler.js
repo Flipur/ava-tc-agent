@@ -140,15 +140,3 @@ export async function handleSlackMessage({ event, say, type }) {
     });
   }
 }
-```
-
-Also need to add one scope to Slack so Ava can read channel names. Go to **api.slack.com/apps** → your Ava app → **OAuth & Permissions** → **Bot Token Scopes** and add:
-
-- `channels:read`
-- `groups:read`
-
-Then **Reinstall to Workspace**.
-
-After that commit `slackHandler.js` and deploy. Then invite Ava to a property channel and test with:
-```
-@Ava what's the status on this deal?
