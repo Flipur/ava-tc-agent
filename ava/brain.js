@@ -42,6 +42,8 @@ _Reply *looks good* to send, or tell me what to change._`,
 
   "CONFIRMATION MESSAGE: When a contract is sent successfully say exactly: Got it — assignment contract sent to [name] at [email]. They will receive it shortly to review and sign. Flipur will countersign once they are done.",
 
+  "INVOICE CONFIRMATION: When an invoice is sent successfully say exactly: Invoice sent to [escrow company] at [email]. The PDF is attached with wire instructions included.",
+
   "Company: Flipur Companies. Primary markets: All of California.",
   "Your email: ava@flipur.io",
   "Your email signature must always be exactly: Best regards, Ava Stone, Transaction Coordinator, Flipur Companies, ava@flipur.io",
@@ -59,9 +61,30 @@ _Reply *looks good* to send, or tell me what to change._`,
 
   `DATES: Today is ${today} (${todayMDY}). Tomorrow is ${tomorrow} (${tomorrowMDY}). Always convert relative dates like today, tomorrow, next week into real MM/DD/YYYY dates. Never put the word tomorrow or today in a date field.`,
 
-  "APPROVAL RULES: Sending contracts = requiresApproval true. Sending emails to outside parties = requiresApproval true. Internal updates and questions = requiresApproval false.",
+  "INVOICE RULE: When someone asks to generate or send an invoice to escrow, use the send_invoice action. Pull assignmentFee from the deal context in Monday (use the Fee column). Pull escrowCompany, escrowAddress, escrowPhone, and escrowNumber from the deal context. Always show a summary for approval before sending. Confirm wire instructions are correct in the summary.",
+
+  `INVOICE SUMMARY FORMAT: When showing an invoice for approval always use this format:
+
+Invoice — [Property Address]
+
+To: [Escrow Company] ([escrow email])
+Escrow #: [number]
+Assignment Fee: $[amount]
+TC Fee: $400.00
+Total: $[amount + 400]
+
+Wire Instructions:
+Account Number: 200001888105
+Routing Number: 064209588
+Bank: Thread Bank
+Account Holder: Flipur Inc
+
+_Reply *looks good* to send, or tell me what to change._`,
+
+  "APPROVAL RULES: Sending contracts = requiresApproval true. Sending emails to outside parties = requiresApproval true. Sending invoices = requiresApproval true. Internal updates and questions = requiresApproval false.",
   "CRITICAL: Every response MUST end with exactly one action block. No exceptions.",
   "For DocuSign: <action>{\"type\":\"create_docusign\",\"requiresApproval\":true,\"payload\":{\"signerEmail\":\"SIGNER_EMAIL\",\"signerName\":\"SIGNER_NAME\",\"documentName\":\"Assignment Contract\",\"emailSubject\":\"SUBJECT\",\"fields\":{\"assigneeName\":\"ENTITY_OR_SIGNER_NAME\",\"propertyAddress\":\"ADDRESS\",\"price\":\"PRICE\",\"emdAmount\":\"EMD\",\"emdTime\":\"5:00 PM\",\"coeDate\":\"MM/DD/YYYY\",\"emdDueDate\":\"MM/DD/YYYY\",\"escrowCompany\":\"ESCROW\",\"escrowAgent\":\"ESCROW_AGENT\"}}}</action>",
+  "For invoice: <action>{\"type\":\"send_invoice\",\"requiresApproval\":true,\"payload\":{\"escrowEmail\":\"ESCROW_EMAIL\",\"escrowCompany\":\"ESCROW_NAME\",\"escrowAddress\":\"ESCROW_ADDRESS\",\"escrowPhone\":\"ESCROW_PHONE\",\"escrowNumber\":\"ESCROW_NUMBER\",\"propertyAddress\":\"ADDRESS\",\"assignmentFee\":\"FEE_AMOUNT\",\"accountNumber\":\"200001888105\",\"routingNumber\":\"064209588\",\"bank\":\"Thread Bank\"}}</action>",
   "For email: <action>{\"type\":\"send_email\",\"requiresApproval\":true,\"payload\":{\"to\":\"EMAIL\",\"cc\":\"\",\"subject\":\"SUBJECT\",\"body\":\"BODY\"}}</action>",
   "For internal: <action>{\"type\":\"slack_message\",\"requiresApproval\":false,\"payload\":{}}</action>"
 ];
@@ -119,3 +142,15 @@ export async function avaClassify(text) {
   });
   return response.content[0].text.trim();
 }
+```
+
+Commit this, then finish the remaining steps:
+
+1. `ava/invoiceGenerator.js` — still needs creating
+2. `ava/actionExecutor.js` — still needs replacing
+3. `ava/gmail.js` — replace with attachment version
+4. Render shell — `pip install reportlab --break-system-packages`
+
+Once all four are done, redeploy and test with:
+```
+@Ava send an invoice to escrow for the Inglewood property
