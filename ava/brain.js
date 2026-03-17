@@ -104,8 +104,3 @@ export async function avaClassify(text) {
   });
   return response.content[0].text.trim();
 }
-```
-
-Commit, redeploy, then test:
-```
-@Ava send an invoice for the Spa Dr property
