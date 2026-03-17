@@ -63,6 +63,7 @@ const ASSIGNMENT_LABEL_MAP = {
   "Text 1b77e2fb-8de1-4598-8106-98eddb054406": "emdAmount",
   "Text 5fdc4b30-5e25-4bbb-a5ee-8e10ee535a53": "emdTime",
   "Text 524c1743-5e3f-45e2-9c12-bfb8b20a745d": "emdDueDate",
+  "Text 8a4b22ba-e48e-4b4a-965f-b858bbad8d38": "additionalTerms",
 };
 
 async function updateAssignmentTabs(token, accountId, envelopeId, recipient, fields) {
@@ -147,7 +148,6 @@ export async function createDocuSignEnvelope({ signerEmail, signerName, document
     );
     const recipients = await recipientsRes.json();
 
-    // Fields are now assigned to Assignee in the template
     const assignee = (recipients.signers || [])
       .find(s => s.roleName === "Assignee");
 
