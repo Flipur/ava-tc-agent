@@ -43,7 +43,6 @@ const C = {
 };
 
 function extractSearchTerm(rawText) {
-  // Strip Slack email/link formatting like <mailto:sam@flipur.io|sam@flipur.io> and <http://...>
   const text = rawText.replace(/<mailto:[^>]+>/g, "").replace(/<https?:[^>]+>/g, "").replace(/<[^>]+>/g, "").trim();
   const t = text.toLowerCase();
 
@@ -85,4 +84,120 @@ function itemToDeal(item) {
     buyer: cols[C.buyer], supplierName: cols[C.supplierName],
     supplierType: cols[C.supplierType], split: cols[C.split],
     notes: cols[C.notes], dispoManager: cols[C.dispoManager],
-    titleCompany: cols[C.titleCompany], titleOfficer: co
+    titleCompany: cols[C.titleCompany], titleOfficer: cols[C.titleOfficer],
+    onOffMarket: cols[C.onOffMarket], exclusive: cols[C.exclusive],
+    access: cols[C.access], lockboxCode: cols[C.lockboxCode],
+    occupancy: cols[C.occupancy], additionalNotes: cols[C.additionalNotes],
+    pool: cols[C.pool], sellingPoints: cols[C.sellingPoints],
+    region: cols[C.region], bedrooms: cols[C.bedrooms],
+    bathrooms: cols[C.bathrooms], sqftHome: cols[C.sqftHome],
+    sqftLot: cols[C.sqftLot], yearBuilt: cols[C.yearBuilt],
+  };
+}
+
+async function fetchAllItems() {
+  const allItems = [];
+  for (const groupId of ALL_GROUPS) {
+    try {
+      const res = await mondayQuery(`query {
+        boards(ids: ${BOARD_ID}) {
+          groups(ids: "${groupId}") {
+            items_page(limit: 200) {
+              items { id name column_values { id text value } }
+            }
+          }
+        }
+      }`);
+      const items = res?.data?.boards?.[0]?.groups?.[0]?.items_page?.items || [];
+      allItems.push(...items);
+    } catch (e) {
+      console.error("Monday fetchAllItems error for group", groupId, e.message);
+    }
+  }
+  return allItems;
+}
+
+export async function getDealContext(text) {
+  const searchTerm = extractSearchTerm(text);
+  if (!searchTerm) return null;
+  console.log("Monday searching for:", searchTerm);
+
+  try {
+    const items = await fetchAllItems();
+    console.log("Monday total items:", items.length);
+
+    const matches = items.filter(i => i.name.toLowerCase().includes(searchTerm));
+    console.log("Monday matches:", matches.length, matches.map(i => i.name));
+
+    if (matches.length === 0) return { notFound: true };
+    if (matches.length === 1) return itemToDeal(matches[0]);
+    return { deals: matches.map(itemToDeal) };
+
+  } catch (e) {
+    console.error("Monday getDealContext error:", e.message);
+    return null;
+  }
+}
+
+export async function getAllActiveDeals() {
+  try {
+    const res = await mondayQuery(`query {
+      boards(ids: ${BOARD_ID}) {
+        groups(ids: "topics") {
+          items_page(limit: 200) {
+            items { id name column_values { id text } }
+          }
+        }
+      }
+    }`);
+    const items = res?.data?.boards?.[0]?.groups?.[0]?.items_page?.items || [];
+    return items
+      .filter(item => {
+        const cols = Object.fromEntries(item.column_values.map(c => [c.id, c.text]));
+        return cols[C.status] === "Active";
+      })
+      .map(item => {
+        const cols = Object.fromEntries(item.column_values.map(c => [c.id, c.text]));
+        return {
+          mondayId: item.id, address: item.name,
+          coe: cols[C.coe], ipEnds: cols[C.ipEnds],
+          emdDue: cols[C.emdDue], nextStep: cols[C.nextStep],
+          requester: cols[C.requester], contractPrice: cols[C.contractPrice],
+          escrow: cols[C.escrow], buyer: cols[C.buyer],
+          status: cols[C.status], region: cols[C.region],
+          dispoManager: cols[C.dispoManager],
+        };
+      });
+  } catch (e) {
+    console.error("Monday getAllActiveDeals error:", e.message);
+    return [];
+  }
+}
+
+export async function updateMondayItem({ mondayId, columnId, value }) {
+  return mondayQuery(`mutation {
+    change_simple_column_value(
+      board_id: ${BOARD_ID}, item_id: ${mondayId},
+      column_id: "${columnId}", value: "${value}"
+    ) { id }
+  }`);
+}
+
+export async function createMondayItem({ dealAddress, groupId, columnValues }) {
+  const vals = JSON.stringify(JSON.stringify(columnValues));
+  return mondayQuery(`mutation {
+    create_item(
+      board_id: ${BOARD_ID}, group_id: "${groupId || "topics"}",
+      item_name: "${dealAddress}", column_values: ${vals}
+    ) { id }
+  }`);
+}
+
+async function mondayQuery(query) {
+  const res = await fetch(MONDAY_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: process.env.MONDAY_API_KEY },
+    body: JSON.stringify({ query }),
+  });
+  return res.json();
+}
