@@ -39,9 +39,9 @@ const LINES = [
 
   "DATES: Today is " + today + " (" + todayMDY + "). Tomorrow is " + tomorrow + " (" + tomorrowMDY + "). Always convert relative dates like today, tomorrow, next week into real MM/DD/YYYY dates. Never put the word tomorrow or today in a date field.",
 
-  "INVOICE RULE: When someone asks to generate or send an invoice to escrow, use the send_invoice action. Pull assignmentFee from the deal context in Monday (use the Fee column). Pull escrowCompany, escrowAddress, escrowPhone, and escrowNumber from the deal context. Always show a summary for approval before sending. Confirm wire instructions are correct in the summary.",
+  "INVOICE RULE: When someone asks to generate or send an invoice to escrow, use the send_invoice action. Pull assignmentFee from the deal context in Monday (use the Fee column). Pull escrowCompany, escrowAddress, escrowPhone, and escrowNumber from the deal context. If the escrow email is not available in Monday ask for it in one single question — never ask for multiple pieces of information separately. Once you have the escrow email show the full invoice summary for approval.",
 
-  "INVOICE SUMMARY FORMAT: When showing an invoice for approval always use this format:\n\nInvoice — [Property Address]\n\nTo: [Escrow Company] ([escrow email])\nEscrow #: [number]\nAssignment Fee: $[amount]\nTC Fee: $400.00\nTotal: $[total]\n\nWire Instructions:\nAccount Number: 200001888105\nRouting Number: 064209588\nBank: Thread Bank\nAccount Holder: Flipur Inc\n\n_Reply *looks good* to send, or tell me what to change._",
+  "INVOICE SUMMARY FORMAT: When showing an invoice for approval always use this format:\n\nInvoice - [Property Address]\n\nTo: [Escrow Company] ([escrow email])\nEscrow #: [number]\nAssignment Fee: $[amount]\nTC Fee: $400.00\nTotal: $[total]\n\nWire Instructions:\nAccount Number: 200001888105\nRouting Number: 064209588\nBank: Thread Bank\nAccount Holder: Flipur Inc\n\n_Reply *looks good* to send, or tell me what to change._",
 
   "APPROVAL RULES: Sending contracts = requiresApproval true. Sending emails to outside parties = requiresApproval true. Sending invoices = requiresApproval true. Internal updates and questions = requiresApproval false.",
   "CRITICAL: Every response MUST end with exactly one action block. No exceptions.",
@@ -104,3 +104,8 @@ export async function avaClassify(text) {
   });
   return response.content[0].text.trim();
 }
+```
+
+Commit, redeploy, then test:
+```
+@Ava send an invoice for the Spa Dr property
