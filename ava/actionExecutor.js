@@ -2,10 +2,10 @@ import { sendEmail } from "./gmail.js";
 import { createDocuSignEnvelope } from "./docusign.js";
 import { updateMondayItem, createMondayItem } from "./monday.js";
 import { updateCloseDeal } from "./close.js";
+import { generateEscrowInvoice } from "./invoiceGenerator.js";
 
 export async function executeAction(action) {
   switch (action.type) {
-
     case "send_email":
       await sendEmail(action.payload);
       return { summary: `Email sent to ${action.payload.to}.` };
@@ -13,6 +13,17 @@ export async function executeAction(action) {
     case "create_docusign":
       const envelope = await createDocuSignEnvelope(action.payload);
       return { summary: `DocuSign envelope created. ID: ${envelope.envelopeId}` };
+
+    case "send_invoice": {
+      const { pdfBuffer, invoiceNumber, fileName } = await generateEscrowInvoice(action.payload);
+      await sendEmail({
+        to: action.payload.escrowEmail,
+        subject: `Invoice ${invoiceNumber} — ${action.payload.propertyAddress}`,
+        body: `Please find attached invoice ${invoiceNumber} for the assignment fee on ${action.payload.propertyAddress}.\n\nWire instructions are included on the invoice.\n\nBest regards,\nAva Stone\nTransaction Coordinator\nFlipur Companies\nava@flipur.io`,
+        attachments: [{ filename: fileName, content: pdfBuffer.toString("base64"), encoding: "base64", contentType: "application/pdf" }],
+      });
+      return { summary: `Invoice ${invoiceNumber} sent to ${action.payload.escrowEmail}.` };
+    }
 
     case "update_monday":
       await updateMondayItem(action.payload);
@@ -27,7 +38,6 @@ export async function executeAction(action) {
       return { summary: `Close CRM updated.` };
 
     case "slack_message":
-      // Internal Slack messages are handled directly by slackHandler
       return { summary: `Slack message sent.` };
 
     default:
