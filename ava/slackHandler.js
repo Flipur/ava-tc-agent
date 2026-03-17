@@ -29,8 +29,12 @@ export async function handleSlackMessage({ event, say, type }) {
   const channel = event.channel;
   const ts = event.ts;
   const threadTs = event.thread_ts;
+  const isDM = event.channel_type === "im" || event.channel_type === "mpim";
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
   if (!cleanText) return;
+
+  // In DMs never use thread_ts so replies appear inline
+  const replyTs = isDM ? undefined : (threadTs || ts);
 
   if (threadTs && pendingApprovals.has(threadTs)) {
     await handleApproval({ message: { ...event, text: cleanText }, say });
@@ -39,7 +43,7 @@ export async function handleSlackMessage({ event, say, type }) {
 
   try {
     let messages = [];
-    if (threadTs) {
+    if (threadTs && !isDM) {
       try {
         const history = await slackApp.client.conversations.replies({
           channel,
@@ -96,7 +100,7 @@ export async function handleSlackMessage({ event, say, type }) {
     if (action && action.requiresApproval) {
       await say({
         text: avaResponse,
-        thread_ts: threadTs || ts,
+        thread_ts: replyTs,
         blocks: [
           { type: "section", text: { type: "mrkdwn", text: avaResponse } },
           {
@@ -116,16 +120,16 @@ export async function handleSlackMessage({ event, say, type }) {
         createdAt: Date.now(),
       });
     } else if (action && !action.requiresApproval) {
-      await say({ text: avaResponse, thread_ts: threadTs || ts });
+      await say({ text: avaResponse, thread_ts: replyTs });
       await executeAction(action);
     } else {
-      await say({ text: avaResponse, thread_ts: threadTs || ts });
+      await say({ text: avaResponse, thread_ts: replyTs });
     }
   } catch (err) {
     console.error("Ava slackHandler error:", err);
     await say({
       text: "Hit an error on my end. Let me know if you need me to retry.",
-      thread_ts: threadTs || ts,
+      thread_ts: replyTs,
     });
   }
 }
