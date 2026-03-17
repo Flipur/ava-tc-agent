@@ -1,22 +1,17 @@
 {
   "name": "ava-tc-agent",
   "version": "1.0.0",
-  "description": "Ava Stone — Flipur Companies AI Transaction Coordinator",
   "type": "module",
-  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "postinstall": "pip install reportlab --break-system-packages || true"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.24.0",
-    "@slack/bolt": "^3.18.0",
-    "dotenv": "^16.4.0",
+    "@slack/bolt": "^3.17.0",
+    "anthropic": "^0.20.0",
+    "dotenv": "^16.0.0",
     "googleapis": "^140.0.0",
     "jsonwebtoken": "^9.0.0",
-    "pdfkit": "^0.15.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "node-fetch": "^3.3.0"
   }
 }
