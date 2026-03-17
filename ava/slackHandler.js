@@ -1,15 +1,4 @@
-function extractAddressFromChannelName(channelName) {
-  if (!channelName) return null;
-  const match = channelName.match(/^(\d+)-(.+)/);
-  if (!match) return null;
-  // Convert hyphens to spaces and strip trailing -usa
-  const full = channelName.replace(/-usa$/, "").replace(/-/g, " ").trim();
-  // Only use first 3 words (number + street name + street type) to avoid city/state mismatches
-  const parts = full.split(" ");
-  const shortAddress = parts.slice(0, 3).join(" ");
-  return shortAddress;
-}
-Want the full slackHandler.js or just confirm this one function change?Yes8:47 AMjavascriptimport { askAva } from "./brain.js";
+import { askAva } from "./brain.js";
 import { executeAction } from "./actionExecutor.js";
 import { getDealContext } from "./monday.js";
 import { pendingApprovals, handleApproval } from "./approvalHandler.js";
@@ -19,12 +8,9 @@ function extractAddressFromChannelName(channelName) {
   if (!channelName) return null;
   const match = channelName.match(/^(\d+)-(.+)/);
   if (!match) return null;
-  // Convert hyphens to spaces and strip trailing -usa
   const full = channelName.replace(/-usa$/, "").replace(/-/g, " ").trim();
-  // Only use first 3 words (number + street name + street type) to avoid city/state mismatches
   const parts = full.split(" ");
-  const shortAddress = parts.slice(0, 3).join(" ");
-  return shortAddress;
+  return parts.slice(0, 3).join(" ");
 }
 
 async function getChannelName(channelId) {
@@ -46,7 +32,6 @@ export async function handleSlackMessage({ event, say, type }) {
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
   if (!cleanText) return;
 
-  // If this is a thread reply and there's a pending approval, route to approval handler
   if (threadTs && pendingApprovals.has(threadTs)) {
     await handleApproval({ message: { ...event, text: cleanText }, say });
     return;
@@ -75,7 +60,6 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    // Check if this is a property channel — use channel name as deal lookup
     let dealResult = null;
     const channelName = await getChannelName(channel);
     const channelAddress = extractAddressFromChannelName(channelName);
@@ -85,7 +69,6 @@ export async function handleSlackMessage({ event, say, type }) {
       dealResult = await getDealContext(channelAddress);
     }
 
-    // Fall back to searching message text if channel lookup fails
     if (!dealResult || dealResult.notFound) {
       const fullThreadText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
       dealResult = await getDealContext(fullThreadText);
