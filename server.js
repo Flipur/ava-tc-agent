@@ -49,6 +49,8 @@ slackApp.message(async ({ message, say }) => {
   if (isDuplicate(message.event_ts || message.ts)) return;
 
   const threadTs = message.thread_ts;
+  const isMention = message.text.includes(`<@${process.env.SLACK_BOT_USER_ID}>`);
+  const isDM = message.channel_type === "im" || message.channel_type === "mpim";
 
   if (threadTs) {
     const hasPending = pendingApprovals.has(threadTs);
@@ -59,11 +61,10 @@ slackApp.message(async ({ message, say }) => {
     }
   }
 
-  const isMention = message.text.includes(`<@${process.env.SLACK_BOT_USER_ID}>`);
-  const isDM = message.channel_type === "im" || message.channel_type === "mpim";
-  const isThreadReply = !!threadTs;
+  // Respond to @mentions in channels, any message in DMs, or @tagged thread replies
+  const isTaggedThreadReply = !!threadTs && isMention;
 
-  if (isMention || isDM || isThreadReply) {
+  if (isMention || isDM || isTaggedThreadReply) {
     await handleSlackMessage({ event: message, say, type: isDM ? "dm" : "mention" });
   }
 });
