@@ -43,11 +43,19 @@ const C = {
 };
 
 function extractSearchTerm(rawText) {
-  const text = rawText.replace(/<mailto:[^>]+>/g, "").replace(/<https?:[^>]+>/g, "").replace(/<[^>]+>/g, "").trim();
+  // Strip Slack formatting
+  const text = rawText
+    .replace(/<mailto:[^>]+>/g, "")
+    .replace(/<https?:[^>]+>/g, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\$[\d,]+/g, "")  // strip dollar amounts like $860,000
+    .replace(/\d+%/g, "")      // strip percentages
+    .trim();
   const t = text.toLowerCase();
 
-  const withNumber = text.match(/\d+\s+[^,\n?]+/);
-  if (withNumber) return withNumber[0].trim().toLowerCase();
+  // Must be 3-6 digit street number followed by a street name
+  const withNumber = text.match(/\b(\d{3,6})\s+([A-Za-z][^,\n?]{2,})/);
+  if (withNumber) return (withNumber[1] + " " + withNumber[2]).trim().toLowerCase();
 
   const withStreet = text.match(/(?:on|for|about|at|the)\s+([\w\s]+(?:cir|st|ave|blvd|dr|ln|rd|way|ct|park|glen|hill|lake|ridge|terrace)\b[^,\n?]*)/i);
   if (withStreet) return withStreet[1].trim().toLowerCase();
