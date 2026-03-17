@@ -9,7 +9,6 @@ function extractAddressFromChannelName(channelName) {
   const shortAddress = parts.slice(0, 3).join(" ");
   return shortAddress;
 }
-This turns 4331-melbourne-ave-los-feliz into 4331 melbourne ave which will match 4331 Melbourne Ave, Los Angeles, CA 90027 (Los Feliz) in Monday.
 Want the full slackHandler.js or just confirm this one function change?Yes8:47 AMjavascriptimport { askAva } from "./brain.js";
 import { executeAction } from "./actionExecutor.js";
 import { getDealContext } from "./monday.js";
