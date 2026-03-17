@@ -42,7 +42,8 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    const fullThreadText = messages.map((m) => m.content).join(" ");
+    // Only search user messages for deal context — not Ava's responses
+    const fullThreadText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
     const dealResult = await getDealContext(fullThreadText);
     const context =
       dealResult && dealResult.deals
