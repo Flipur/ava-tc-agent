@@ -4,6 +4,32 @@ import { getDealContext } from "./monday.js";
 import { pendingApprovals, handleApproval } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
 
+// Detect if a channel name looks like a property address
+// e.g. "172-lawnview-cir-danville-ca-94526-usa"
+function extractAddressFromChannelName(channelName) {
+  if (!channelName) return null;
+  // Channel names use hyphens instead of spaces
+  // Property channels start with a street number
+  const match = channelName.match(/^(\d+)-(.+)/);
+  if (!match) return null;
+  // Convert hyphens back to spaces, remove trailing -usa if present
+  const address = channelName
+    .replace(/-usa$/, "")
+    .replace(/-/g, " ")
+    .trim();
+  return address;
+}
+
+async function getChannelName(channelId) {
+  try {
+    const result = await slackApp.client.conversations.info({ channel: channelId });
+    return result.channel?.name || null;
+  } catch (e) {
+    console.error("Failed to get channel name:", e.message);
+    return null;
+  }
+}
+
 export async function handleSlackMessage({ event, say, type }) {
   const text = event.text || "";
   const userId = event.user;
@@ -42,9 +68,22 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    // Only search user messages for deal context — not Ava's responses
-    const fullThreadText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
-    const dealResult = await getDealContext(fullThreadText);
+    // Check if this is a property channel — if so use channel name as deal lookup
+    let dealResult = null;
+    const channelName = await getChannelName(channel);
+    const channelAddress = extractAddressFromChannelName(channelName);
+
+    if (channelAddress) {
+      console.log("Property channel detected:", channelName, "-> searching for:", channelAddress);
+      dealResult = await getDealContext(channelAddress);
+    }
+
+    // If no property channel match, fall back to searching message text
+    if (!dealResult || dealResult.notFound) {
+      const fullThreadText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
+      dealResult = await getDealContext(fullThreadText);
+    }
+
     const context =
       dealResult && dealResult.deals
         ? { deals: dealResult.deals }
@@ -54,8 +93,13 @@ export async function handleSlackMessage({ event, say, type }) {
         ? { deal: dealResult }
         : {};
 
+    // If in a property channel with a loaded deal, add channel context to system
+    const channelContext = channelAddress && context.deal
+      ? { ...context, propertyChannel: channelName, autoLoadedAddress: channelAddress }
+      : context;
+
     const { text: avaResponse, action } = await askAva(messages, {
-      ...context,
+      ...channelContext,
       slackUser: userId,
       channel,
     });
@@ -96,3 +140,15 @@ export async function handleSlackMessage({ event, say, type }) {
     });
   }
 }
+```
+
+Also need to add one scope to Slack so Ava can read channel names. Go to **api.slack.com/apps** → your Ava app → **OAuth & Permissions** → **Bot Token Scopes** and add:
+
+- `channels:read`
+- `groups:read`
+
+Then **Reinstall to Workspace**.
+
+After that commit `slackHandler.js` and deploy. Then invite Ava to a property channel and test with:
+```
+@Ava what's the status on this deal?
