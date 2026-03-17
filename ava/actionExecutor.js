@@ -3,6 +3,7 @@ import { createDocuSignEnvelope } from "./docusign.js";
 import { updateMondayItem, createMondayItem } from "./monday.js";
 import { updateCloseDeal } from "./close.js";
 import { generateEscrowInvoice } from "./invoiceGenerator.js";
+import { generateBidPDF } from "./bidGenerator.js";
 
 export async function executeAction(action) {
   switch (action.type) {
@@ -29,6 +30,11 @@ export async function executeAction(action) {
         }],
       });
       return { summary: "Invoice " + invoiceNumber + " sent to " + action.payload.escrowEmail + "." };
+    }
+
+    case "generate_bid": {
+      const { pdfBuffer, fileName } = await generateBidPDF(action.payload);
+      return { summary: "Bid generated.", pdfBuffer, fileName };
     }
 
     case "update_monday":
