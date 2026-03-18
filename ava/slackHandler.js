@@ -4,11 +4,14 @@ import { getDealContext } from "./monday.js";
 import { pendingApprovals, handleApproval } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
 
+// Per-user deal context cache for DMs
+const dmDealCache = new Map();
+
 function extractAddressFromChannelName(channelName) {
   if (!channelName) return null;
   const match = channelName.match(/^(\d+)-(.+)/);
   if (!match) return null;
-  const full = channelName.replace(/-usa$/, "").replace(/-/g, " ").trim();
+  const full = channelName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/-usa$/, "").replace(/-/g, " ").trim();
   const parts = full.split(" ");
   return parts.slice(0, 3).join(" ");
 }
@@ -33,7 +36,6 @@ export async function handleSlackMessage({ event, say, type }) {
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
   if (!cleanText) return;
 
-  // In DMs never use thread_ts so replies appear inline
   const replyTs = isDM ? undefined : (threadTs || ts);
 
   if (threadTs && pendingApprovals.has(threadTs)) {
@@ -64,18 +66,31 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    let dealResult = null;
+    // Check property channel first — highest priority
     const channelName = await getChannelName(channel);
     const channelAddress = extractAddressFromChannelName(channelName);
+    let dealResult = null;
 
     if (channelAddress) {
       console.log("Property channel detected:", channelName, "-> searching for:", channelAddress);
       dealResult = await getDealContext(channelAddress);
     }
 
+    // Fall back to searching thread text
     if (!dealResult || dealResult.notFound) {
       const fullThreadText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
       dealResult = await getDealContext(fullThreadText);
+    }
+
+    // In DMs cache the deal and fall back to cached deal if nothing found
+    if (isDM) {
+      if (dealResult && !dealResult.notFound && !dealResult.deals) {
+        dmDealCache.set(userId, dealResult);
+      } else if (!dealResult || dealResult.notFound) {
+        if (dmDealCache.has(userId)) {
+          dealResult = dmDealCache.get(userId);
+        }
+      }
     }
 
     const context =
@@ -87,12 +102,18 @@ export async function handleSlackMessage({ event, say, type }) {
         ? { deal: dealResult }
         : {};
 
-    const channelContext = channelAddress && context.deal
-      ? { ...context, propertyChannel: channelName, autoLoadedAddress: channelAddress }
+    // If in a property channel, inject it strongly into context so Ava uses it as default
+    const finalContext = channelAddress && context.deal
+      ? {
+          ...context,
+          propertyChannel: channelName,
+          autoLoadedAddress: channelAddress,
+          channelNote: "You are in the property channel for " + context.deal.address + ". All requests in this channel are for this property unless explicitly stated otherwise.",
+        }
       : context;
 
     const { text: avaResponse, action } = await askAva(messages, {
-      ...channelContext,
+      ...finalContext,
       slackUser: userId,
       channel,
     });
