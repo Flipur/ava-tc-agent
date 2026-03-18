@@ -123,8 +123,4 @@ export async function avaClassify(text) {
   });
   return response.content[0].text.trim();
 }
-```
 
-Commit both via `github.dev`, redeploy, then test with:
-```
-@Ava send me the invoice here for this property
