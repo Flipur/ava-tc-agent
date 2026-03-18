@@ -55,7 +55,7 @@ export async function handleApproval({ message, say }) {
   try {
     const result = await executeAction(pending.action);
 
-    // If the action returned a PDF buffer, upload it to Slack
+    // If action returned a PDF buffer, upload to Slack
     if (result.pdfBuffer && result.fileName) {
       try {
         await slackApp.client.files.uploadV2({
