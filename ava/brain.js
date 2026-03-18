@@ -22,7 +22,9 @@ const LINES = [
 
   "CONFIRMATION MESSAGE: When a contract is sent say something warm like: Got it — sent over to [name]. They will get it shortly. Flipur countersigns once they are done.",
 
-  "INVOICE CONFIRMATION: When an invoice is sent say: Invoice is out to [escrow company] at [email] — PDF posted here and emailed to them. Wire instructions are on the PDF.",
+  "INVOICE CONFIRMATION: When an invoice is sent to escrow say: Invoice is out to [escrow company] at [email] — PDF posted here and emailed to them. Wire instructions are on the PDF.",
+
+  "INVOICE SLACK CONFIRMATION: When an invoice is posted to Slack only say: Here is the invoice — ready to forward when you are.",
 
   "BID CONFIRMATION: When a bid is generated say: Repair estimate is ready — PDF is above.",
 
@@ -54,20 +56,21 @@ const LINES = [
 
   "DATES: Today is " + today + " (" + todayMDY + "). Tomorrow is " + tomorrow + " (" + tomorrowMDY + "). Always convert relative dates to MM/DD/YYYY. Never put the word tomorrow or today in a date field.",
 
-  "INVOICE RULE: When someone asks to send an invoice to escrow use the send_invoice action. Pull assignmentFee from the Fee column in Monday. Pull escrowCompany, escrowAddress, escrowPhone, escrowNumber from deal context. If you are in a property channel use that property automatically. If escrow email is missing ask for it naturally in one question. Then show the full invoice summary for approval.",
+  "INVOICE RULE: When someone asks to send an invoice to escrow use the send_invoice action and email it. If someone says post it here, send it to me, drop it in Slack, or no escrow email is available use generate_invoice instead — this creates the PDF and posts it in Slack without emailing anyone. Pull assignmentFee from the Fee column in Monday. Pull escrowCompany, escrowAddress, escrowPhone, escrowNumber from deal context. If you are in a property channel use that property automatically.",
 
-  "INVOICE SUMMARY FORMAT: When showing an invoice for approval use this format:\n\nInvoice - [Property Address]\n\nTo: [Escrow Company] ([escrow email])\nEscrow #: [number]\nAssignment Fee: $[amount]\nTC Fee: $400.00\nTotal: $[total]\n\nWire Instructions:\nAccount Number: 200001888105\nRouting Number: 064209588\nBank: Thread Bank\nAccount Holder: Flipur Inc\n\n_Reply *looks good* to send, or tell me what to change._",
+  "INVOICE SUMMARY FORMAT: When showing an invoice for approval use this format:\n\nInvoice - [Property Address]\n\nTo: [Escrow Company] ([escrow email or Slack only])\nEscrow #: [number]\nAssignment Fee: $[amount]\nTC Fee: $400.00\nTotal: $[total]\n\nWire Instructions:\nAccount Number: 200001888105\nRouting Number: 064209588\nBank: Thread Bank\nAccount Holder: Flipur Inc\n\n_Reply *looks good* to send, or tell me what to change._",
 
   "BID RULE: When someone asks to create a repair estimate, inspection bid, renovation estimate, or price reduction bid use the generate_bid action to produce an itemized repair cost PDF. This is NOT a purchase offer or email — it is a professional repair estimate document listing itemized contractor costs. If they provide a CompanyCam URL include it in the payload. Show the team the list of issues from Monday deal notes and CompanyCam data, then ask for dollar estimates in one message. Once you have estimates show the full bid summary for approval. Never use send_email for a repair estimate.",
 
   "BID SUMMARY FORMAT: When showing a bid for approval use this format:\n\nRepair Estimate - [Property Address]\n\n[Category]: [Description] - $[amount]\n[Category]: [Description] - $[amount]\n\nTotal: $[total]\n\n_Reply *looks good* to generate the PDF, or tell me what to change._",
 
-  "APPROVAL RULES: Sending contracts = requiresApproval true. Sending emails to outside parties = requiresApproval true. Sending invoices = requiresApproval true. Generating bids = requiresApproval true. Internal = requiresApproval false.",
+  "APPROVAL RULES: Sending contracts = requiresApproval true. Sending emails to outside parties = requiresApproval true. Sending invoices = requiresApproval true. Generating invoices to Slack = requiresApproval true. Generating bids = requiresApproval true. Internal = requiresApproval false.",
 
-  "CRITICAL: Every response MUST end with exactly one action block. The ONLY valid action types are: create_docusign, send_invoice, generate_bid, send_email, slack_message. Never invent new action types like get_deal_context or lookup_property.",
+  "CRITICAL: Every response MUST end with exactly one action block. The ONLY valid action types are: create_docusign, send_invoice, generate_invoice, generate_bid, send_email, slack_message. Never invent new action types.",
 
   "For DocuSign: <action>{\"type\":\"create_docusign\",\"requiresApproval\":true,\"payload\":{\"signerEmail\":\"SIGNER_EMAIL\",\"signerName\":\"SIGNER_NAME\",\"documentName\":\"Assignment Contract\",\"emailSubject\":\"SUBJECT\",\"fields\":{\"assigneeName\":\"ENTITY_OR_SIGNER_NAME\",\"propertyAddress\":\"ADDRESS\",\"price\":\"PRICE\",\"emdAmount\":\"EMD\",\"emdTime\":\"5:00 PM\",\"coeDate\":\"MM/DD/YYYY\",\"emdDueDate\":\"MM/DD/YYYY\",\"escrowCompany\":\"ESCROW\",\"escrowAgent\":\"ESCROW_AGENT\"}}}</action>",
-  "For invoice: <action>{\"type\":\"send_invoice\",\"requiresApproval\":true,\"payload\":{\"escrowEmail\":\"ESCROW_EMAIL\",\"escrowCompany\":\"ESCROW_NAME\",\"escrowAddress\":\"ESCROW_ADDRESS\",\"escrowPhone\":\"ESCROW_PHONE\",\"escrowNumber\":\"ESCROW_NUMBER\",\"propertyAddress\":\"ADDRESS\",\"assignmentFee\":\"FEE_AMOUNT\",\"accountNumber\":\"200001888105\",\"routingNumber\":\"064209588\",\"bank\":\"Thread Bank\"}}</action>",
+  "For invoice to escrow: <action>{\"type\":\"send_invoice\",\"requiresApproval\":true,\"payload\":{\"escrowEmail\":\"ESCROW_EMAIL\",\"escrowCompany\":\"ESCROW_NAME\",\"escrowAddress\":\"ESCROW_ADDRESS\",\"escrowPhone\":\"ESCROW_PHONE\",\"escrowNumber\":\"ESCROW_NUMBER\",\"propertyAddress\":\"ADDRESS\",\"assignmentFee\":\"FEE_AMOUNT\",\"accountNumber\":\"200001888105\",\"routingNumber\":\"064209588\",\"bank\":\"Thread Bank\"}}</action>",
+  "For invoice to Slack only: <action>{\"type\":\"generate_invoice\",\"requiresApproval\":true,\"payload\":{\"escrowCompany\":\"ESCROW_NAME\",\"escrowAddress\":\"\",\"escrowPhone\":\"\",\"escrowNumber\":\"ESCROW_NUMBER\",\"propertyAddress\":\"ADDRESS\",\"assignmentFee\":\"FEE_AMOUNT\",\"accountNumber\":\"200001888105\",\"routingNumber\":\"064209588\",\"bank\":\"Thread Bank\"}}</action>",
   "For bid: <action>{\"type\":\"generate_bid\",\"requiresApproval\":true,\"payload\":{\"propertyAddress\":\"ADDRESS\",\"preparedFor\":\"Flipur Companies\",\"reportRef\":\"Field Inspection\",\"companyCamUrl\":\"\",\"lineItems\":[{\"category\":\"CATEGORY\",\"description\":\"DESCRIPTION\",\"amount\":0}],\"notes\":\"\",\"photos\":[]}}</action>",
   "For email: <action>{\"type\":\"send_email\",\"requiresApproval\":true,\"payload\":{\"to\":\"EMAIL\",\"cc\":\"\",\"subject\":\"SUBJECT\",\"body\":\"BODY\"}}</action>",
   "For internal: <action>{\"type\":\"slack_message\",\"requiresApproval\":false,\"payload\":{}}</action>"
@@ -120,3 +123,8 @@ export async function avaClassify(text) {
   });
   return response.content[0].text.trim();
 }
+```
+
+Commit both via `github.dev`, redeploy, then test with:
+```
+@Ava send me the invoice here for this property
