@@ -1,91 +1,67 @@
-import { executeAction } from "./actionExecutor.js";
-import { askAva } from "./brain.js";
-import { isRejection } from "../server.js";
-import { slackApp } from "../server.js";
+import { sendEmail } from "./gmail.js";
+import { createDocuSignEnvelope } from "./docusign.js";
+import { updateMondayItem, createMondayItem } from "./monday.js";
+import { updateCloseDeal } from "./close.js";
+import { generateEscrowInvoice } from "./invoiceGenerator.js";
+import { generateBidPDF } from "./bidGenerator.js";
 
-export const pendingApprovals = new Map();
+export async function executeAction(action) {
+  switch (action.type) {
+    case "send_email":
+      await sendEmail(action.payload);
+      return { summary: "Email sent to " + action.payload.to + "." };
 
-export async function handleApproval({ message, say }) {
-  const threadTs = message.thread_ts;
-  const pending = pendingApprovals.get(threadTs);
-  if (!pending) return;
-
-  const text = message.text || "";
-
-  if (isRejection(text)) {
-    const { text: revised, action: newAction } = await askAva(
-      [
-        {
-          role: "user",
-          content: "You previously drafted this action: " + JSON.stringify(pending.action) + ". The team wants this change: \"" + text + "\". Revise and show the updated version for approval.",
-        },
-      ],
-      { deal: pending.dealContext || null }
-    );
-
-    if (newAction && newAction.requiresApproval) {
-      pendingApprovals.set(threadTs, {
-        action: newAction,
-        channel: message.channel,
-        requestedBy: message.user,
-        dealContext: pending.dealContext || null,
-        createdAt: Date.now(),
-      });
-      await say({
-        text: revised,
-        channel: message.channel,
-        thread_ts: threadTs,
-        blocks: [
-          { type: "section", text: { type: "mrkdwn", text: revised } },
-          {
-            type: "context",
-            elements: [{ type: "mrkdwn", text: "_Reply *looks good* to send, or tell me what to change._" }],
-          },
-        ],
-      });
-    } else {
-      pendingApprovals.delete(threadTs);
-      await say({ text: revised, channel: message.channel, thread_ts: threadTs });
+    case "create_docusign": {
+      const envelope = await createDocuSignEnvelope(action.payload);
+      return { summary: "DocuSign envelope created. ID: " + envelope.envelopeId };
     }
-    return;
-  }
 
-  // Approved — execute
-  pendingApprovals.delete(threadTs);
-  try {
-    const result = await executeAction(pending.action);
+    case "send_invoice": {
+      const { pdfBuffer, invoiceNumber, fileName } = await generateEscrowInvoice(action.payload);
 
-    // If action returned a PDF buffer, upload to Slack
-    if (result.pdfBuffer && result.fileName) {
-      try {
-        await slackApp.client.files.uploadV2({
-          channel_id: message.channel,
-          thread_ts: threadTs,
-          filename: result.fileName,
-          file: result.pdfBuffer,
-          initial_comment: result.summary || "Here is your document.",
-        });
-      } catch (uploadErr) {
-        console.error("Failed to upload PDF to Slack:", uploadErr.message);
-        await say({
-          text: "Document generated but could not upload to Slack: " + uploadErr.message,
-          channel: message.channel,
-          thread_ts: threadTs,
-        });
-      }
-    } else {
-      await say({
-        text: "Done. " + result.summary,
-        channel: message.channel,
-        thread_ts: threadTs,
+      // Email to escrow
+      await sendEmail({
+        to: action.payload.escrowEmail,
+        subject: "Invoice " + invoiceNumber + " - " + action.payload.propertyAddress,
+        body: "Please find attached invoice " + invoiceNumber + " for the assignment fee on " + action.payload.propertyAddress + ".\n\nWire instructions are included on the invoice.\n\nBest regards,\nAva Stone\nTransaction Coordinator\nFlipur Companies\nava@flipur.io",
+        attachments: [{
+          filename: fileName,
+          content: pdfBuffer.toString("base64"),
+          encoding: "base64",
+          contentType: "application/pdf"
+        }],
       });
+
+      // Also return PDF buffer so approvalHandler uploads it to Slack
+      return {
+        summary: "Invoice " + invoiceNumber + " sent to " + action.payload.escrowEmail + " and posted here.",
+        pdfBuffer,
+        fileName,
+      };
     }
-  } catch (err) {
-    console.error("Action execution failed:", err);
-    await say({
-      text: "Ran into an issue: " + err.message + ". Want me to retry?",
-      channel: message.channel,
-      thread_ts: threadTs,
-    });
+
+    case "generate_bid": {
+      const { pdfBuffer, fileName } = await generateBidPDF(action.payload);
+      return { summary: "Repair estimate ready.", pdfBuffer, fileName };
+    }
+
+    case "update_monday":
+      await updateMondayItem(action.payload);
+      return { summary: "Monday.com updated for " + action.payload.dealAddress + "." };
+
+    case "create_monday_item": {
+      const item = await createMondayItem(action.payload);
+      return { summary: "New Monday.com task created: " + item.id };
+    }
+
+    case "update_close":
+      await updateCloseDeal(action.payload);
+      return { summary: "Close CRM updated." };
+
+    case "slack_message":
+      return { summary: "Slack message sent." };
+
+    default:
+      throw new Error("Unknown action type: " + action.type);
   }
 }
