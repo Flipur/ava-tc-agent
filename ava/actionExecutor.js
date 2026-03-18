@@ -29,12 +29,25 @@ export async function executeAction(action) {
           contentType: "application/pdf"
         }],
       });
-      return { summary: "Invoice " + invoiceNumber + " sent to " + action.payload.escrowEmail + "." };
+      return {
+        summary: "Invoice " + invoiceNumber + " sent to " + action.payload.escrowEmail + " and posted here.",
+        pdfBuffer,
+        fileName,
+      };
+    }
+
+    case "generate_invoice": {
+      const { pdfBuffer, invoiceNumber, fileName } = await generateEscrowInvoice(action.payload);
+      return {
+        summary: "Invoice " + invoiceNumber + " ready — PDF posted above.",
+        pdfBuffer,
+        fileName,
+      };
     }
 
     case "generate_bid": {
       const { pdfBuffer, fileName } = await generateBidPDF(action.payload);
-      return { summary: "Bid generated.", pdfBuffer, fileName };
+      return { summary: "Repair estimate ready.", pdfBuffer, fileName };
     }
 
     case "update_monday":
