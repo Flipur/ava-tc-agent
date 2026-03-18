@@ -43,19 +43,14 @@ const C = {
 };
 
 function extractSearchTerm(rawText) {
-  // Strip Slack formatting
-  const text = rawText
-    .replace(/<mailto:[^>]+>/g, "")
-    .replace(/<https?:[^>]+>/g, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\$[\d,]+/g, "")  // strip dollar amounts like $860,000
-    .replace(/\d+%/g, "")      // strip percentages
-    .trim();
+  // Normalize accents — vía -> via, café -> cafe, etc.
+  const normalized = rawText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // Strip Slack email/link formatting
+  const text = normalized.replace(/<mailto:[^>]+>/g, "").replace(/<https?:[^>]+>/g, "").replace(/<[^>]+>/g, "").trim();
   const t = text.toLowerCase();
 
-  // Must be 3-6 digit street number followed by a street name
-  const withNumber = text.match(/\b(\d{3,6})\s+([A-Za-z][^,\n?]{2,})/);
-  if (withNumber) return (withNumber[1] + " " + withNumber[2]).trim().toLowerCase();
+  const withNumber = text.match(/\d+\s+[^,\n?]+/);
+  if (withNumber) return withNumber[0].trim().toLowerCase();
 
   const withStreet = text.match(/(?:on|for|about|at|the)\s+([\w\s]+(?:cir|st|ave|blvd|dr|ln|rd|way|ct|park|glen|hill|lake|ridge|terrace)\b[^,\n?]*)/i);
   if (withStreet) return withStreet[1].trim().toLowerCase();
@@ -134,7 +129,11 @@ export async function getDealContext(text) {
     const items = await fetchAllItems();
     console.log("Monday total items:", items.length);
 
-    const matches = items.filter(i => i.name.toLowerCase().includes(searchTerm));
+    // Also normalize item names for comparison
+    const matches = items.filter(i => {
+      const normalizedName = i.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      return normalizedName.includes(searchTerm);
+    });
     console.log("Monday matches:", matches.length, matches.map(i => i.name));
 
     if (matches.length === 0) return { notFound: true };
@@ -142,70 +141,4 @@ export async function getDealContext(text) {
     return { deals: matches.map(itemToDeal) };
 
   } catch (e) {
-    console.error("Monday getDealContext error:", e.message);
-    return null;
-  }
-}
-
-export async function getAllActiveDeals() {
-  try {
-    const res = await mondayQuery(`query {
-      boards(ids: ${BOARD_ID}) {
-        groups(ids: "topics") {
-          items_page(limit: 200) {
-            items { id name column_values { id text } }
-          }
-        }
-      }
-    }`);
-    const items = res?.data?.boards?.[0]?.groups?.[0]?.items_page?.items || [];
-    return items
-      .filter(item => {
-        const cols = Object.fromEntries(item.column_values.map(c => [c.id, c.text]));
-        return cols[C.status] === "Active";
-      })
-      .map(item => {
-        const cols = Object.fromEntries(item.column_values.map(c => [c.id, c.text]));
-        return {
-          mondayId: item.id, address: item.name,
-          coe: cols[C.coe], ipEnds: cols[C.ipEnds],
-          emdDue: cols[C.emdDue], nextStep: cols[C.nextStep],
-          requester: cols[C.requester], contractPrice: cols[C.contractPrice],
-          escrow: cols[C.escrow], buyer: cols[C.buyer],
-          status: cols[C.status], region: cols[C.region],
-          dispoManager: cols[C.dispoManager],
-        };
-      });
-  } catch (e) {
-    console.error("Monday getAllActiveDeals error:", e.message);
-    return [];
-  }
-}
-
-export async function updateMondayItem({ mondayId, columnId, value }) {
-  return mondayQuery(`mutation {
-    change_simple_column_value(
-      board_id: ${BOARD_ID}, item_id: ${mondayId},
-      column_id: "${columnId}", value: "${value}"
-    ) { id }
-  }`);
-}
-
-export async function createMondayItem({ dealAddress, groupId, columnValues }) {
-  const vals = JSON.stringify(JSON.stringify(columnValues));
-  return mondayQuery(`mutation {
-    create_item(
-      board_id: ${BOARD_ID}, group_id: "${groupId || "topics"}",
-      item_name: "${dealAddress}", column_values: ${vals}
-    ) { id }
-  }`);
-}
-
-async function mondayQuery(query) {
-  const res = await fetch(MONDAY_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: process.env.MONDAY_API_KEY },
-    body: JSON.stringify({ query }),
-  });
-  return res.json();
-}
+    con
