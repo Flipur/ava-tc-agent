@@ -26,6 +26,19 @@ async function getChannelName(channelId) {
   }
 }
 
+// Try to find a property channel for a given address
+async function findPropertyChannel(address) {
+  try {
+    const result = await slackApp.client.conversations.list({ limit: 200, types: "public_channel,private_channel" });
+    const channels = result.channels || [];
+    const searchTerm = address.split(",")[0].toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const match = channels.find(c => c.name.toLowerCase().includes(searchTerm.substring(0, 8)));
+    return match ? "#" + match.name : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function handleSlackMessage({ event, say, type }) {
   const text = event.text || "";
   const userId = event.user;
@@ -66,20 +79,26 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    // Check property channel first — highest priority
+    // Check property channel first — HIGHEST PRIORITY, never override
     const channelName = await getChannelName(channel);
     const channelAddress = extractAddressFromChannelName(channelName);
     let dealResult = null;
+    let lockedToChannel = false;
 
     if (channelAddress) {
       console.log("Property channel detected:", channelName, "-> searching for:", channelAddress);
       dealResult = await getDealContext(channelAddress);
+      if (dealResult && !dealResult.notFound && !dealResult.deals) {
+        lockedToChannel = true; // Lock to this property — never search thread text
+      }
     }
 
-    // Fall back to searching thread text
-    if (!dealResult || dealResult.notFound) {
-      const fullThreadText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
-      dealResult = await getDealContext(fullThreadText);
+    // Only search thread text if NOT in a property channel
+    if (!lockedToChannel) {
+      if (!dealResult || dealResult.notFound) {
+        const fullThreadText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
+        dealResult = await getDealContext(fullThreadText);
+      }
     }
 
     // In DMs cache the deal and fall back to cached deal if nothing found
@@ -102,15 +121,32 @@ export async function handleSlackMessage({ event, say, type }) {
         ? { deal: dealResult }
         : {};
 
-    // If in a property channel, inject it strongly into context so Ava uses it as default
-    const finalContext = channelAddress && context.deal
-      ? {
+    // Build channel context — locked address overrides everything
+    let finalContext = context;
+    if (channelAddress && context.deal) {
+      finalContext = {
+        ...context,
+        propertyChannel: channelName,
+        autoLoadedAddress: channelAddress,
+        channelNote: "You are in the property channel for " + context.deal.address + ". ALL requests in this channel are ONLY for this property. Never use any other address even if mentioned in the thread. The property is locked to: " + context.deal.address,
+      };
+    } else if (context.deal && !channelAddress) {
+      // Not in a property channel — suggest one if deal was found
+      const suggestedChannel = await findPropertyChannel(context.deal.address);
+      if (suggestedChannel) {
+        finalContext = {
           ...context,
-          propertyChannel: channelName,
-          autoLoadedAddress: channelAddress,
-          channelNote: "You are in the property channel for " + context.deal.address + ". All requests in this channel are for this property unless explicitly stated otherwise.",
-        }
-      : context;
+          channelNote: "A property channel exists for this deal: " + suggestedChannel + ". You can mention to the team that they can add you to " + suggestedChannel + " for dedicated deal coordination.",
+        };
+      } else {
+        // No channel exists — suggest creating one
+        const channelSlug = context.deal.address.split(",")[0].toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+        finalContext = {
+          ...context,
+          channelNote: "No dedicated channel found for " + context.deal.address + ". If you want dedicated coordination, the team can create #" + channelSlug + " and add you there.",
+        };
+      }
+    }
 
     const { text: avaResponse, action } = await askAva(messages, {
       ...finalContext,
