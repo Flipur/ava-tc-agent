@@ -34,6 +34,54 @@ async function findPropertyChannel(address) {
   }
 }
 
+function getWeekNumber(date) {
+  const start = new Date(date.getFullYear(), 0, 1);
+  return Math.floor((date - start) / (7 * 24 * 60 * 60 * 1000)) + 1;
+}
+
+async function readChannelHistory(channelName, weeks = 12) {
+  try {
+    const list = await slackApp.client.conversations.list({ limit: 200, types: "public_channel,private_channel" });
+    const channel = (list.channels || []).find(c => c.name === channelName.replace("#", ""));
+    if (!channel) {
+      console.log("Channel not found:", channelName);
+      return null;
+    }
+
+    const oldest = (Date.now() - weeks * 7 * 24 * 60 * 60 * 1000) / 1000;
+    let messages = [];
+    let cursor;
+
+    do {
+      const res = await slackApp.client.conversations.history({
+        channel: channel.id,
+        oldest: oldest.toString(),
+        limit: 200,
+        cursor,
+      });
+      messages = messages.concat(res.messages || []);
+      cursor = res.response_metadata?.next_cursor;
+    } while (cursor);
+
+    console.log("Channel history fetched:", channelName, messages.length, "messages");
+
+    return {
+      channelName,
+      channelId: channel.id,
+      messageCount: messages.length,
+      messages: messages.map(m => ({
+        ts: m.ts,
+        text: (m.text || "").substring(0, 200),
+        date: new Date(parseFloat(m.ts) * 1000).toLocaleDateString("en-US"),
+        week: getWeekNumber(new Date(parseFloat(m.ts) * 1000)),
+      })),
+    };
+  } catch (e) {
+    console.error("readChannelHistory error:", e.message);
+    return null;
+  }
+}
+
 export async function handleSlackMessage({ event, say, type }) {
   const text = event.text || "";
   const userId = event.user;
@@ -116,7 +164,34 @@ export async function handleSlackMessage({ event, say, type }) {
       };
     }
 
-    const { text: avaResponse, action } = await askAva(messages, { ...finalContext, slackUser: userId, channel });
+    // Check if message is asking about a channel's history
+    let channelHistory = null;
+    const channelMention = cleanText.match(/#([\w-]+)/);
+    const isHistoryRequest = channelMention && (
+      cleanText.includes("how many") ||
+      cleanText.includes("check") ||
+      cleanText.includes("analyze") ||
+      cleanText.includes("history") ||
+      cleanText.includes("pattern") ||
+      cleanText.includes("week") ||
+      cleanText.includes("count") ||
+      cleanText.includes("track") ||
+      cleanText.includes("requests") ||
+      cleanText.includes("messages")
+    );
+
+    if (isHistoryRequest) {
+      console.log("Channel history request detected for:", channelMention[1]);
+      channelHistory = await readChannelHistory(channelMention[1], 12);
+    }
+
+    const { text: avaResponse, action } = await askAva(messages, {
+      ...finalContext,
+      slackUser: userId,
+      channel,
+      channelHistory: channelHistory || undefined,
+    });
+
     const safeText = (avaResponse || "").trim() || "On it.";
 
     if (action && action.requiresApproval) {
