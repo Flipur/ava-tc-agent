@@ -55,11 +55,12 @@ slackApp.message(async ({ message, say }) => {
   if (threadTs) {
     const hasPending = pendingApprovals.has(threadTs);
     console.log("Thread reply detected. thread_ts: " + threadTs + ", hasPending: " + hasPending + ", text: " + message.text);
-    if (hasPending && (isApproval(message.text) || isRejection(message.text))) {
-      await handleApproval({ message, say });
-      return;
-    }
+if (hasPending) {
+  if (isApproval(message.text) || isRejection(message.text)) {
+    await handleApproval({ message, say });
   }
+  return;
+}
 
   // Respond to @mentions in channels, any message in DMs, or @tagged thread replies
   const isTaggedThreadReply = !!threadTs && isMention;
