@@ -60,13 +60,6 @@ export async function askAva(messages, context) {
     max_tokens: 4000,
     system,
     messages,
-    mcp_servers: [
-      {
-        type: "url",
-        url: "https://mcp.monday.com/mcp",
-        name: "monday",
-      }
-    ],
   });
 
   // Extract text and action from response
