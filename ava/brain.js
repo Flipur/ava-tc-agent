@@ -36,7 +36,7 @@ const SYSTEM_PROMPT = [
 
   "CHANNEL CONTEXT: If channelNote is provided you are in a dedicated property channel. All requests are automatically for that property. Never ask which property.",
 
-  "CHANNEL HISTORY: When channelHistory is provided you have pre-computed exact message counts per week. These numbers are calculated in code and are 100% accurate. Always report them exactly as given — never recount, refilter, or estimate. Each message in the weekly count represents one activity in that channel. When someone asks about requests, activity, or volume in a channel, report the weekly message counts directly as the answer. Present the breakdown cleanly with totals, averages, and peak weeks. Do not try to filter by keyword unless the user explicitly asks for keyword filtering.",
+  "CHANNEL HISTORY: When channelHistory is provided you have pre-computed exact message counts and sender breakdowns per week. These numbers are calculated in code and are 100% accurate. Always report them exactly as given. When asked who submitted requests or to break down by person, use the topSenders data per week and the overallTopSenders list. Present cleanly with totals, averages, peak weeks, and top contributors.",
 
   "NEVER ASK FOR info already in Monday or channel context. Pull it directly.",
 
