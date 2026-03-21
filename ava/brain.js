@@ -104,7 +104,7 @@ export async function askAva(messages, context) {
         return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " - " + end.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ": " + count + " messages";
       }).join("\n");
     const msgs = ctx.channelHistory.messages;
-    system += "\n\nChannel history for " + ctx.channelHistory.channelName + ":\nTotal: " + ctx.channelHistory.messageCount + " messages\nDate range: " + new Date(parseFloat(msgs[msgs.length-1]?.ts)*1000).toLocaleDateString() + " to " + new Date(parseFloat(msgs[0]?.ts)*1000).toLocaleDateString() + "\n\nWeekly message counts (Monday to Sunday):\n" + weekSummary;
+    system += "\n\nChannel history for " + ctx.channelHistory.channelName + ":\nTotal: " + ctx.channelHistory.messageCount + " messages\nDate range: " + new Date(parseFloat(msgs[msgs.length-1]?.ts)*1000).toLocaleDateString() + " to " + new Date(parseFloat(msgs[0]?.ts)*1000).toLocaleDateString() + "\n\nWEEKLY MESSAGE COUNTS — these are exact counts, do not estimate or filter, report these numbers exactly:\n" + weekSummary + "\n\nIMPORTANT: The counts above are total messages per week. When asked about RPA requests or any activity in this channel, use these exact numbers. Do not try to filter or recount.";
    }
   const response = await claude.messages.create({
     model: "claude-opus-4-5",
