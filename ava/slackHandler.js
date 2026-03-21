@@ -84,16 +84,18 @@ async function readChannelHistory(channelName, weeks = 12) {
 
     console.log("Channel history fetched:", channelName, messages.length, "messages");
 
-    // Resolve unique user IDs to names
+    // Resolve user IDs to names
     const uniqueUsers = [...new Set(messages.map(m => m.user).filter(Boolean))];
     const userNames = {};
     for (const uid of uniqueUsers) {
       userNames[uid] = await getUserName(uid);
     }
 
-    // Pre-compute weekly buckets with sender tracking
+    // Pre-compute weekly buckets
     const byWeek = {};
-    const senderTotals = {};
+    const docTypeTotals = {};
+    const requestorTotals = {};
+    const agentTotals = {};
 
     for (const m of messages) {
       const d = new Date(parseFloat(m.ts) * 1000);
@@ -101,15 +103,37 @@ async function readChannelHistory(channelName, weeks = 12) {
       monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
       const key = monday.toISOString().substring(0, 10);
 
-      if (!byWeek[key]) byWeek[key] = { count: 0, senders: {}, samples: [] };
+      if (!byWeek[key]) byWeek[key] = { count: 0, senders: {}, docTypes: {}, requestors: {}, agents: {} };
       byWeek[key].count++;
 
+      // Sender
       const name = userNames[m.user] || m.username || "unknown";
       byWeek[key].senders[name] = (byWeek[key].senders[name] || 0) + 1;
-      senderTotals[name] = (senderTotals[name] || 0) + 1;
 
-      if (byWeek[key].samples.length < 2) {
-        byWeek[key].samples.push((m.text || "").substring(0, 80));
+      const txt = m.text || "";
+
+      // Document Type
+      const dtMatch = txt.match(/Document Type:\s*([^\n]+)/i);
+      if (dtMatch) {
+        const dt = dtMatch[1].trim().toUpperCase();
+        byWeek[key].docTypes[dt] = (byWeek[key].docTypes[dt] || 0) + 1;
+        docTypeTotals[dt] = (docTypeTotals[dt] || 0) + 1;
+      }
+
+      // Requestor
+      const rqMatch = txt.match(/Requestor:\s*@?([\w\s.]+?)(?:\n|$)/i);
+      if (rqMatch) {
+        const rq = rqMatch[1].trim();
+        byWeek[key].requestors[rq] = (byWeek[key].requestors[rq] || 0) + 1;
+        requestorTotals[rq] = (requestorTotals[rq] || 0) + 1;
+      }
+
+      // Agent Name
+      const agMatch = txt.match(/Agent Name:\s*([^\n]+)/i);
+      if (agMatch) {
+        const ag = agMatch[1].trim();
+        byWeek[key].agents[ag] = (byWeek[key].agents[ag] || 0) + 1;
+        agentTotals[ag] = (agentTotals[ag] || 0) + 1;
       }
     }
 
@@ -119,23 +143,14 @@ async function readChannelHistory(channelName, weeks = 12) {
         const d = new Date(monday);
         const end = new Date(d);
         end.setDate(d.getDate() + 6);
-        const topSenders = Object.entries(data.senders)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([name, count]) => name + ": " + count);
         return {
           week: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " - " + end.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
           count: data.count,
-          topSenders,
-          samples: data.samples,
+          docTypes: data.docTypes,
+          topRequestors: Object.entries(data.requestors).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, c]) => n + ": " + c),
+          topAgents: Object.entries(data.agents).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, c]) => n + ": " + c),
         };
       });
-
-    // Overall top senders
-    const overallTopSenders = Object.entries(senderTotals)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, count]) => name + ": " + count);
 
     const sorted = messages.slice().sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 
@@ -144,7 +159,9 @@ async function readChannelHistory(channelName, weeks = 12) {
       channelId: channel.id,
       messageCount: messages.length,
       weeklySummary,
-      overallTopSenders,
+      docTypeTotals,
+      requestorTotals: Object.entries(requestorTotals).sort((a, b) => b[1] - a[1]).slice(0, 15).reduce((o, [k, v]) => { o[k] = v; return o; }, {}),
+      agentTotals: Object.entries(agentTotals).sort((a, b) => b[1] - a[1]).slice(0, 15).reduce((o, [k, v]) => { o[k] = v; return o; }, {}),
       oldestDate: new Date(parseFloat(sorted[0]?.ts) * 1000).toLocaleDateString(),
       newestDate: new Date(parseFloat(sorted[sorted.length - 1]?.ts) * 1000).toLocaleDateString(),
     };
@@ -188,7 +205,7 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    // Detect channel analysis requests early to skip Monday search
+    // Detect channel analysis requests
     const channelMention = cleanText.match(/<#([A-Z0-9]+)\|([\w-]+)>/) || cleanText.match(/#([\w-]+)/);
     const rawChannelId = cleanText.match(/<#([A-Z0-9]+)\|/)?.[1];
     const isChannelAnalysis = !!(channelMention && (
@@ -205,10 +222,11 @@ export async function handleSlackMessage({ event, say, type }) {
       cleanText.includes("who") ||
       cleanText.includes("sender") ||
       cleanText.includes("submitted") ||
-      cleanText.includes("breakdown")
+      cleanText.includes("breakdown") ||
+      cleanText.includes("agent") ||
+      cleanText.includes("requestor")
     ));
 
-    // Also detect follow-up analysis questions in thread context
     const isFollowUpAnalysis = !!threadTs && (
       cleanText.includes("who") ||
       cleanText.includes("break") ||
@@ -216,7 +234,8 @@ export async function handleSlackMessage({ event, say, type }) {
       cleanText.includes("submitted") ||
       cleanText.includes("by person") ||
       cleanText.includes("by user") ||
-      cleanText.includes("by agent")
+      cleanText.includes("by agent") ||
+      cleanText.includes("requestor")
     );
 
     const channelName = await getChannelName(channel);
@@ -267,7 +286,6 @@ export async function handleSlackMessage({ event, say, type }) {
       };
     }
 
-    // Fetch channel history for analysis requests
     let channelHistory = null;
     if (isChannelAnalysis) {
       const lookupName = rawChannelId || (channelMention && channelMention[1]);
