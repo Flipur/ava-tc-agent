@@ -34,11 +34,6 @@ async function findPropertyChannel(address) {
   }
 }
 
-function getWeekNumber(date) {
-  const start = new Date(date.getFullYear(), 0, 1);
-  return Math.floor((date - start) / (7 * 24 * 60 * 60 * 1000)) + 1;
-}
-
 async function readChannelHistory(channelName, weeks = 12) {
   try {
     let allChannels = [];
@@ -52,12 +47,14 @@ async function readChannelHistory(channelName, weeks = 12) {
       allChannels = allChannels.concat(lr.channels || []);
       nextCursor = lr.response_metadata?.next_cursor;
     } while (nextCursor);
+
     const cleanName = channelName.replace("#", "");
     const channel = allChannels.find(c => c.name === cleanName || c.id === cleanName);
     if (!channel) {
       console.log("Channel not found:", channelName, "searched:", allChannels.length);
       return null;
     }
+
     const oldest = (Date.now() - weeks * 7 * 24 * 60 * 60 * 1000) / 1000;
     let messages = [];
     let cursor;
@@ -71,17 +68,45 @@ async function readChannelHistory(channelName, weeks = 12) {
       messages = messages.concat(res.messages || []);
       cursor = res.response_metadata?.next_cursor;
     } while (cursor);
+
     console.log("Channel history fetched:", channelName, messages.length, "messages");
+
+    // Pre-compute weekly buckets in code — exact counts, no AI guessing
+    const byWeek = {};
+    for (const m of messages) {
+      const d = new Date(parseFloat(m.ts) * 1000);
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      const key = monday.toISOString().substring(0, 10);
+      if (!byWeek[key]) byWeek[key] = { count: 0, samples: [] };
+      byWeek[key].count++;
+      if (byWeek[key].samples.length < 2) {
+        byWeek[key].samples.push((m.text || "").substring(0, 80));
+      }
+    }
+
+    const weeklySummary = Object.entries(byWeek)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([monday, data]) => {
+        const d = new Date(monday);
+        const end = new Date(d);
+        end.setDate(d.getDate() + 6);
+        return {
+          week: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " - " + end.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          count: data.count,
+          samples: data.samples,
+        };
+      });
+
+    const sorted = messages.slice().sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
+
     return {
       channelName,
       channelId: channel.id,
       messageCount: messages.length,
-      messages: messages.map(m => ({
-        ts: m.ts,
-        text: (m.text || "").substring(0, 200),
-        date: new Date(parseFloat(m.ts) * 1000).toLocaleDateString("en-US"),
-        week: getWeekNumber(new Date(parseFloat(m.ts) * 1000)),
-      })),
+      weeklySummary,
+      oldestDate: new Date(parseFloat(sorted[0]?.ts) * 1000).toLocaleDateString(),
+      newestDate: new Date(parseFloat(sorted[sorted.length - 1]?.ts) * 1000).toLocaleDateString(),
     };
   } catch (e) {
     console.error("readChannelHistory error:", e.message);
