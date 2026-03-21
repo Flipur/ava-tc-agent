@@ -5,6 +5,19 @@ import { pendingApprovals, handleApproval } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
 
 const dmDealCache = new Map();
+const userNameCache = new Map();
+
+async function getUserName(userId) {
+  if (userNameCache.has(userId)) return userNameCache.get(userId);
+  try {
+    const res = await slackApp.client.users.info({ user: userId });
+    const name = res.user?.real_name || res.user?.name || userId;
+    userNameCache.set(userId, name);
+    return name;
+  } catch (e) {
+    return userId;
+  }
+}
 
 function extractAddressFromChannelName(channelName) {
   if (!channelName) return null;
@@ -71,15 +84,30 @@ async function readChannelHistory(channelName, weeks = 12) {
 
     console.log("Channel history fetched:", channelName, messages.length, "messages");
 
-    // Pre-compute weekly buckets in code — exact counts, no AI guessing
+    // Resolve unique user IDs to names
+    const uniqueUsers = [...new Set(messages.map(m => m.user).filter(Boolean))];
+    const userNames = {};
+    for (const uid of uniqueUsers) {
+      userNames[uid] = await getUserName(uid);
+    }
+
+    // Pre-compute weekly buckets with sender tracking
     const byWeek = {};
+    const senderTotals = {};
+
     for (const m of messages) {
       const d = new Date(parseFloat(m.ts) * 1000);
       const monday = new Date(d);
       monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
       const key = monday.toISOString().substring(0, 10);
-      if (!byWeek[key]) byWeek[key] = { count: 0, samples: [] };
+
+      if (!byWeek[key]) byWeek[key] = { count: 0, senders: {}, samples: [] };
       byWeek[key].count++;
+
+      const name = userNames[m.user] || m.username || "unknown";
+      byWeek[key].senders[name] = (byWeek[key].senders[name] || 0) + 1;
+      senderTotals[name] = (senderTotals[name] || 0) + 1;
+
       if (byWeek[key].samples.length < 2) {
         byWeek[key].samples.push((m.text || "").substring(0, 80));
       }
@@ -91,12 +119,23 @@ async function readChannelHistory(channelName, weeks = 12) {
         const d = new Date(monday);
         const end = new Date(d);
         end.setDate(d.getDate() + 6);
+        const topSenders = Object.entries(data.senders)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([name, count]) => name + ": " + count);
         return {
           week: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " - " + end.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
           count: data.count,
+          topSenders,
           samples: data.samples,
         };
       });
+
+    // Overall top senders
+    const overallTopSenders = Object.entries(senderTotals)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => name + ": " + count);
 
     const sorted = messages.slice().sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 
@@ -105,6 +144,7 @@ async function readChannelHistory(channelName, weeks = 12) {
       channelId: channel.id,
       messageCount: messages.length,
       weeklySummary,
+      overallTopSenders,
       oldestDate: new Date(parseFloat(sorted[0]?.ts) * 1000).toLocaleDateString(),
       newestDate: new Date(parseFloat(sorted[sorted.length - 1]?.ts) * 1000).toLocaleDateString(),
     };
@@ -161,8 +201,23 @@ export async function handleSlackMessage({ event, say, type }) {
       cleanText.includes("count") ||
       cleanText.includes("track") ||
       cleanText.includes("requests") ||
-      cleanText.includes("messages")
+      cleanText.includes("messages") ||
+      cleanText.includes("who") ||
+      cleanText.includes("sender") ||
+      cleanText.includes("submitted") ||
+      cleanText.includes("breakdown")
     ));
+
+    // Also detect follow-up analysis questions in thread context
+    const isFollowUpAnalysis = !!threadTs && (
+      cleanText.includes("who") ||
+      cleanText.includes("break") ||
+      cleanText.includes("sender") ||
+      cleanText.includes("submitted") ||
+      cleanText.includes("by person") ||
+      cleanText.includes("by user") ||
+      cleanText.includes("by agent")
+    );
 
     const channelName = await getChannelName(channel);
     const channelAddress = extractAddressFromChannelName(channelName);
@@ -177,7 +232,7 @@ export async function handleSlackMessage({ event, say, type }) {
       }
     }
 
-    if (!lockedToChannel && !isChannelAnalysis) {
+    if (!lockedToChannel && !isChannelAnalysis && !isFollowUpAnalysis) {
       const fullText = messages.filter(m => m.role === "user").map(m => m.content).join(" ");
       dealResult = await getDealContext(fullText);
     }
@@ -212,6 +267,7 @@ export async function handleSlackMessage({ event, say, type }) {
       };
     }
 
+    // Fetch channel history for analysis requests
     let channelHistory = null;
     if (isChannelAnalysis) {
       const lookupName = rawChannelId || (channelMention && channelMention[1]);
