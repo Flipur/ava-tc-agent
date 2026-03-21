@@ -87,7 +87,14 @@ export async function askAva(messages, context) {
   if (ctx.deals) system += "\n\nMultiple deals found — ask which one:\n" + JSON.stringify(ctx.deals, null, 2);
   if (ctx.notFound) system += "\n\nNo deal found in Monday for that property.";
   if (ctx.channelHistory) {
-    system += "\n\nChannel history for " + ctx.channelHistory.channelName + " (" + ctx.channelHistory.messageCount + " messages):\n" + JSON.stringify(ctx.channelHistory.messages.slice(0, 150), null, 2);
+    const byWeek = {};
+    for (const msg of ctx.channelHistory.messages) {
+      const key = "Week " + msg.week + " (" + msg.date + ")";
+      if (!byWeek[key]) byWeek[key] = [];
+      byWeek[key].push(msg.text.substring(0, 100));
+    }
+    const weekSummary = Object.entries(byWeek).map(([week, msgs]) => week + ": " + msgs.length + " messages").join("\n");
+    system += "\n\nChannel history for " + ctx.channelHistory.channelName + ":\nTotal messages: " + ctx.channelHistory.messageCount + "\nDate range: " + ctx.channelHistory.messages[ctx.channelHistory.messages.length-1]?.date + " to " + ctx.channelHistory.messages[0]?.date + "\n\nWeekly breakdown:\n" + weekSummary + "\n\nSample messages (most recent 50):\n" + JSON.stringify(ctx.channelHistory.messages.slice(0, 50), null, 2);
   }
 
   const response = await claude.messages.create({
