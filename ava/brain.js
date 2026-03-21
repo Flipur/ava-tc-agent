@@ -36,7 +36,7 @@ const SYSTEM_PROMPT = [
 
   "CHANNEL CONTEXT: If channelNote is provided you are in a dedicated property channel. All requests are automatically for that property. Never ask which property.",
 
-  "CHANNEL HISTORY: When channelHistory is provided you have full access to that channel's messages. Analyze them to answer questions about patterns, counts, frequency, and trends. Group by week, count message types, identify patterns. Present findings clearly with week-by-week breakdowns. Never say you cannot read channel history — if channelHistory is in context you have it.",
+  "CHANNEL HISTORY: When channelHistory is provided you have pre-computed exact message counts per week. These numbers are calculated in code and are 100% accurate. Always report them exactly as given — never recount, refilter, or estimate. Present the weekly breakdown cleanly and add useful context like totals, averages, and peak weeks.",
 
   "NEVER ASK FOR info already in Monday or channel context. Pull it directly.",
 
@@ -87,25 +87,13 @@ export async function askAva(messages, context) {
   if (ctx.deals) system += "\n\nMultiple deals found — ask which one:\n" + JSON.stringify(ctx.deals, null, 2);
   if (ctx.notFound) system += "\n\nNo deal found in Monday for that property.";
   if (ctx.channelHistory) {
-    // Group by calendar week starting Monday
-    const byWeek = {};
-    for (const msg of ctx.channelHistory.messages) {
-      const d = new Date(parseFloat(msg.ts) * 1000);
-      const monday = new Date(d);
-      monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-      const key = monday.toISOString().substring(0, 10);
-      byWeek[key] = (byWeek[key] || 0) + 1;
-    }
-    const weekSummary = Object.entries(byWeek)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([monday, count]) => {
-        const d = new Date(monday);
-        const end = new Date(d); end.setDate(d.getDate() + 6);
-        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " - " + end.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ": " + count + " messages";
-      }).join("\n");
-    const msgs = ctx.channelHistory.messages;
-    system += "\n\nChannel history for " + ctx.channelHistory.channelName + ":\nTotal: " + ctx.channelHistory.messageCount + " messages\nDate range: " + new Date(parseFloat(msgs[msgs.length-1]?.ts)*1000).toLocaleDateString() + " to " + new Date(parseFloat(msgs[0]?.ts)*1000).toLocaleDateString() + "\n\nWEEKLY MESSAGE COUNTS — these are exact counts, do not estimate or filter, report these numbers exactly:\n" + weekSummary + "\n\nIMPORTANT: The counts above are total messages per week. When asked about RPA requests or any activity in this channel, use these exact numbers. Do not try to filter or recount.";
-   }
+    const h = ctx.channelHistory;
+    const weekLines = (h.weeklySummary || [])
+      .map(w => w.week + ": " + w.count + " messages")
+      .join("\n");
+    system += "\n\nChannel analysis for " + h.channelName + ":\nTotal messages: " + h.messageCount + "\nDate range: " + h.oldestDate + " to " + h.newestDate + "\n\nExact weekly counts — report these numbers exactly as given, do not recount:\n" + weekLines;
+  }
+
   const response = await claude.messages.create({
     model: "claude-opus-4-5",
     max_tokens: 4000,
