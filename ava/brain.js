@@ -89,9 +89,22 @@ export async function askAva(messages, context) {
   if (ctx.channelHistory) {
     const h = ctx.channelHistory;
     const weekLines = (h.weeklySummary || [])
-      .map(w => w.week + ": " + w.count + " messages")
+      .map(w => {
+        const dtStr = Object.entries(w.docTypes || {}).sort((a,b) => b[1]-a[1]).map(([t,c]) => t+":"+c).join(", ");
+        const rqStr = (w.topRequestors || []).join(", ");
+        return w.week + ": " + w.count + " total" +
+          (dtStr ? " | doc types: " + dtStr : "") +
+          (rqStr ? " | requestors: " + rqStr : "");
+      })
       .join("\n");
-    system += "\n\nChannel analysis for " + h.channelName + ":\nTotal messages: " + h.messageCount + "\nDate range: " + h.oldestDate + " to " + h.newestDate + "\n\nExact weekly counts — report these numbers exactly as given, do not recount:\n" + weekLines;
+    const dtTotal = Object.entries(h.docTypeTotals || {}).sort((a,b) => b[1]-a[1]).map(([t,c]) => t+": "+c).join(", ");
+    const rqTotal = Object.entries(h.requestorTotals || {}).sort((a,b) => b[1]-a[1]).map(([t,c]) => t+": "+c).join(", ");
+    const agTotal = Object.entries(h.agentTotals || {}).sort((a,b) => b[1]-a[1]).map(([t,c]) => t+": "+c).join(", ");
+    system += "\n\nChannel analysis for " + h.channelName + ":\nTotal messages: " + h.messageCount + "\nDate range: " + h.oldestDate + " to " + h.newestDate +
+      (dtTotal ? "\n\nDocument type totals: " + dtTotal : "") +
+      (rqTotal ? "\nTop requestors (12 weeks): " + rqTotal : "") +
+      (agTotal ? "\nTop agents (12 weeks): " + agTotal : "") +
+      "\n\nWeekly breakdown:\n" + weekLines;
   }
 
   const response = await claude.messages.create({
