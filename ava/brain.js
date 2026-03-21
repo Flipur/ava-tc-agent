@@ -87,16 +87,25 @@ export async function askAva(messages, context) {
   if (ctx.deals) system += "\n\nMultiple deals found — ask which one:\n" + JSON.stringify(ctx.deals, null, 2);
   if (ctx.notFound) system += "\n\nNo deal found in Monday for that property.";
   if (ctx.channelHistory) {
+    // Group by calendar week starting Monday
     const byWeek = {};
     for (const msg of ctx.channelHistory.messages) {
-      const key = "Week " + msg.week + " (" + msg.date + ")";
-      if (!byWeek[key]) byWeek[key] = [];
-      byWeek[key].push(msg.text.substring(0, 100));
+      const d = new Date(parseFloat(msg.ts) * 1000);
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      const key = monday.toISOString().substring(0, 10);
+      byWeek[key] = (byWeek[key] || 0) + 1;
     }
-    const weekSummary = Object.entries(byWeek).map(([week, msgs]) => week + ": " + msgs.length + " messages").join("\n");
-    system += "\n\nChannel history for " + ctx.channelHistory.channelName + ":\nTotal messages: " + ctx.channelHistory.messageCount + "\nDate range: " + ctx.channelHistory.messages[ctx.channelHistory.messages.length-1]?.date + " to " + ctx.channelHistory.messages[0]?.date + "\n\nWeekly breakdown:\n" + weekSummary + "\n\nSample messages (most recent 50):\n" + JSON.stringify(ctx.channelHistory.messages.slice(0, 50), null, 2);
-  }
-
+    const weekSummary = Object.entries(byWeek)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([monday, count]) => {
+        const d = new Date(monday);
+        const end = new Date(d); end.setDate(d.getDate() + 6);
+        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " - " + end.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ": " + count + " messages";
+      }).join("\n");
+    const msgs = ctx.channelHistory.messages;
+    system += "\n\nChannel history for " + ctx.channelHistory.channelName + ":\nTotal: " + ctx.channelHistory.messageCount + " messages\nDate range: " + new Date(parseFloat(msgs[msgs.length-1]?.ts)*1000).toLocaleDateString() + " to " + new Date(parseFloat(msgs[0]?.ts)*1000).toLocaleDateString() + "\n\nWeekly message counts (Monday to Sunday):\n" + weekSummary;
+   }
   const response = await claude.messages.create({
     model: "claude-opus-4-5",
     max_tokens: 4000,
