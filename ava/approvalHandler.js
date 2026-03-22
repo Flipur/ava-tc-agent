@@ -38,7 +38,13 @@ export async function handleApproval({ message, say }) {
       { deal: pending.dealContext || null }
     );
     if (newAction && newAction.requiresApproval) {
-      pendingApprovals.set(threadTs, { action: newAction, channel: message.channel, requestedBy: message.user, dealContext: pending.dealContext || null, createdAt: Date.now() });
+      pendingApprovals.set(threadTs, {
+        action: newAction,
+        channel: message.channel,
+        requestedBy: message.user,
+        dealContext: pending.dealContext || null,
+        createdAt: Date.now(),
+      });
       savePending(pendingApprovals);
       await say({ text: (revised || "").trim() || "Updated — reply *looks good* to send.", channel: message.channel, thread_ts: threadTs });
     } else {
@@ -49,17 +55,29 @@ export async function handleApproval({ message, say }) {
     return;
   }
 
+  // Approved — execute
   pendingApprovals.delete(threadTs);
   savePending(pendingApprovals);
   try {
     const result = await executeAction(pending.action);
     if (result.pdfBuffer && result.fileName) {
-      await slackApp.client.files.uploadV2({ channel_id: message.channel, thread_ts: threadTs, filename: result.fileName, file: result.pdfBuffer, initial_comment: result.summary || "Here is your document." });
+      try {
+        await slackApp.client.files.uploadV2({
+          channel_id: message.channel,
+          thread_ts: threadTs,
+          filename: result.fileName,
+          file: result.pdfBuffer,
+          initial_comment: result.summary || "Here is your document.",
+        });
+      } catch (uploadErr) {
+        console.error("Failed to upload PDF:", uploadErr.message);
+        await say({ text: "Document generated but could not upload: " + uploadErr.message, channel: message.channel, thread_ts: threadTs });
+      }
     } else {
       await say({ text: "Done. " + result.summary, channel: message.channel, thread_ts: threadTs });
     }
   } catch (err) {
     console.error("Action execution failed:", err);
-    await say({ text: "Ran into an issue: " + err.message, channel: message.channel, thread_ts: threadTs });
+    await say({ text: "Ran into an issue: " + err.message + ". Want me to retry?", channel: message.channel, thread_ts: threadTs });
   }
 }
