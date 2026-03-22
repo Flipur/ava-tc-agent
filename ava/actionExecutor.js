@@ -4,6 +4,7 @@ import { updateMondayItem, createMondayItem } from "./monday.js";
 import { updateCloseDeal } from "./close.js";
 import { generateEscrowInvoice } from "./invoiceGenerator.js";
 import { generateBidPDF } from "./bidGenerator.js";
+import { createInspectionReport } from "./inspectionGenerator.js";
 
 export async function executeAction(action) {
   switch (action.type) {
@@ -48,6 +49,11 @@ export async function executeAction(action) {
     case "generate_bid": {
       const { pdfBuffer, fileName } = await generateBidPDF(action.payload);
       return { summary: "Repair estimate ready.", pdfBuffer, fileName };
+    }
+
+    case "generate_inspection": {
+      const { pdfBuffer, fileName } = await createInspectionReport(action.payload);
+      return { summary: "Inspection report ready — PDF posted above.", pdfBuffer, fileName };
     }
 
     case "update_monday":
