@@ -106,30 +106,30 @@ async function readChannelHistory(channelName, weeks = 12) {
       if (!byWeek[key]) byWeek[key] = { count: 0, senders: {}, docTypes: {}, requestors: {}, agents: {} };
       byWeek[key].count++;
 
-      // Sender
       const name = userNames[m.user] || m.username || "unknown";
       byWeek[key].senders[name] = (byWeek[key].senders[name] || 0) + 1;
 
       const txt = m.text || "";
 
       // Document Type
-      const dtMatch = txt.match(/Document Type:\s*([^\n]+)/i);
+      const dtMatch = txt.match(/\*?Document Type:\*?\s*([^\n<*]+)/i);
       if (dtMatch) {
         const dt = dtMatch[1].trim().toUpperCase();
         byWeek[key].docTypes[dt] = (byWeek[key].docTypes[dt] || 0) + 1;
         docTypeTotals[dt] = (docTypeTotals[dt] || 0) + 1;
       }
 
-      // Requestor
-      const rqMatch = txt.match(/Requestor:\s*@?([\w\s.]+?)(?:\n|$)/i);
+      // Requestor — extract Slack user ID then resolve to name
+      const rqMatch = txt.match(/\*?Requestor:\*?\s*<@([A-Z0-9]+)>/i);
       if (rqMatch) {
-        const rq = rqMatch[1].trim();
-        byWeek[key].requestors[rq] = (byWeek[key].requestors[rq] || 0) + 1;
-        requestorTotals[rq] = (requestorTotals[rq] || 0) + 1;
+        const rqId = rqMatch[1].trim();
+        const rqName = userNames[rqId] || rqId;
+        byWeek[key].requestors[rqName] = (byWeek[key].requestors[rqName] || 0) + 1;
+        requestorTotals[rqName] = (requestorTotals[rqName] || 0) + 1;
       }
 
       // Agent Name
-      const agMatch = txt.match(/Agent Name:\s*([^\n]+)/i);
+      const agMatch = txt.match(/\*?Agent Name:\*?\s*([^\n<*]+)/i);
       if (agMatch) {
         const ag = agMatch[1].trim();
         byWeek[key].agents[ag] = (byWeek[key].agents[ag] || 0) + 1;
@@ -205,7 +205,6 @@ export async function handleSlackMessage({ event, say, type }) {
       messages = [{ role: "user", content: cleanText }];
     }
 
-    // Detect channel analysis requests
     const channelMention = cleanText.match(/<#([A-Z0-9]+)\|([\w-]+)>/) || cleanText.match(/#([\w-]+)/);
     const rawChannelId = cleanText.match(/<#([A-Z0-9]+)\|/)?.[1];
     const isChannelAnalysis = !!(channelMention && (
