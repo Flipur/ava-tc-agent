@@ -11,6 +11,29 @@ const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Resolve gallery URLs to project URLs by searching CompanyCam by address
+export async function resolveCompanyCamUrl(url, propertyAddress) {
+  if (!url) return null;
+  if (url.includes("/galleries/")) {
+    try {
+      const query = (propertyAddress || "").split(",")[0].trim();
+      console.log("Resolving gallery URL via address search:", query);
+      const res = await fetch("https://api.companycam.com/v2/projects?query=" + encodeURIComponent(query), {
+        headers: { Authorization: "Bearer " + process.env.COMPANYCAM_API_KEY }
+      });
+      const projects = await res.json();
+      if (Array.isArray(projects) && projects.length > 0) {
+        console.log("Resolved gallery to project:", projects[0].id);
+        return "https://app.companycam.com/projects/" + projects[0].id;
+      }
+      console.log("No projects found for address:", query);
+    } catch(e) {
+      console.error("Gallery resolve error:", e.message);
+    }
+  }
+  return url;
+}
+
 // Scan a Slack channel for a CompanyCam link
 export async function findCompanyCamLinkInChannel(channelId) {
   try {
@@ -20,7 +43,7 @@ export async function findCompanyCamLinkInChannel(channelId) {
     });
     for (const msg of res.messages || []) {
       const text = msg.text || "";
-      const match = text.match(/https?:\/\/app\.companycam\.com\/[^\s>]+/);
+      const match = text.match(/https?:\/\/app\.companycam\.com\/[^\s>|]+/);
       if (match) return match[0];
     }
     return null;
@@ -159,7 +182,6 @@ function buildInspectionData(propertyAddress, visionData, acqNotes, followUpAnsw
     const areaFindings = byArea[key] || [];
     if (areaFindings.length === 0) continue;
 
-    // Group by location into items
     const byLocation = {};
     for (const f of areaFindings) {
       const loc = f.location || "General";
@@ -193,6 +215,18 @@ function buildInspectionData(propertyAddress, visionData, acqNotes, followUpAnsw
       amount: Math.round((range[0] + range[1]) / 2),
       priority: hasCritical ? "CRITICAL" : hasMajor ? "MAJOR" : "MODERATE",
     });
+  }
+
+  // Scale costs to match ACQ-stated total if provided
+  const totalMatch = (followUpAnswers || acqNotes || "").match(/\$[\d,]+(?:\.\d+)?/g);
+  const statedTotal = totalMatch ? totalMatch[totalMatch.length - 1] : null;
+  if (statedTotal && costSummary.length > 0) {
+    const totalNum = parseFloat(statedTotal.replace(/[$,]/g, ""));
+    const currentTotal = costSummary.reduce((s, i) => s + i.amount, 0);
+    if (currentTotal > 0 && totalNum > 0) {
+      const scale = totalNum / currentTotal;
+      costSummary.forEach(i => { i.amount = Math.round(i.amount * scale); });
+    }
   }
 
   const execSummary =
@@ -244,7 +278,7 @@ export async function generateInspectionPDF(payload) {
   };
 }
 
-// Main orchestration — called by actionExecutor
+// Main orchestration
 export async function createInspectionReport({ propertyAddress, channelId, companyCamUrl, acqNotes, followUpAnswers }) {
   // 1. Find CompanyCam link if not provided
   let ccUrl = companyCamUrl;
@@ -254,6 +288,9 @@ export async function createInspectionReport({ propertyAddress, channelId, compa
     if (ccUrl) console.log("Found CompanyCam link:", ccUrl);
     else console.log("No CompanyCam link found in channel");
   }
+
+  // 1b. Resolve gallery URLs to project URLs
+  if (ccUrl) ccUrl = await resolveCompanyCamUrl(ccUrl, propertyAddress);
 
   // 2. Fetch photos
   let photos = [];
@@ -273,7 +310,7 @@ export async function createInspectionReport({ propertyAddress, channelId, compa
   const reportNumber = "TRI-" + new Date().toISOString().substring(0,10).replace(/-/g,"") + "-001";
   const inspectionData = buildInspectionData(propertyAddress, visionData, acqNotes, followUpAnswers, reportNumber);
 
-  // 5. Assign photos to first item of each section
+  // 5. Assign photos to sections
   if (photos.length > 0 && inspectionData.sections.length > 0) {
     const perSection = Math.ceil(photos.length / inspectionData.sections.length);
     inspectionData.sections.forEach((sec, i) => {
@@ -291,7 +328,7 @@ export async function createInspectionReport({ propertyAddress, channelId, compa
   return generateInspectionPDF(inspectionData);
 }
 
-// Get follow-up questions from vision analysis (called before full report)
+// Get follow-up questions
 export async function getFollowUpQuestions(photos, acqNotes) {
   const visionData = await analyzePhotosWithVision(photos, acqNotes);
   return visionData?.followUpQuestions || [
