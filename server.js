@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import { handleSlackMessage } from "./ava/slackHandler.js";
 import { handleApproval, pendingApprovals } from "./ava/approvalHandler.js";
 import { startEmailPoller } from "./ava/emailPoller.js";
-import { getDealContext, getAllActiveDeals, searchDealsByTerm, getBoardGroups } from "./ava/monday.js";
+import { getDealContext, getAllActiveDeals, searchDealsByTerm, getGroupItems, getBoardGroups } from "./ava/monday.js";
 dotenv.config();
 
 const receiver = new ExpressReceiver({
@@ -39,6 +39,16 @@ receiver.router.get("/monday/groups", async (req, res) => {
   try {
     const groups = await getBoardGroups();
     res.json({ groups });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+receiver.router.get("/monday/group/:groupId", async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const result = await getGroupItems(groupId);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
