@@ -196,26 +196,34 @@ export async function getAllActiveDeals() {
 
 export async function getGroupItems(groupId) {
   try {
-    const res = await mondayQuery(`query {
-      boards(ids: ${BOARD_ID}) {
-        groups(ids: "${groupId}") {
-          title
-          items_page(limit: 200) {
-            items {
-              id
-              name
-              column_values { id text value }
+    let allItems = [];
+    let cursor = null;
+
+    do {
+      const cursorParam = cursor ? `, cursor: "${cursor}"` : '';
+      const res = await mondayQuery(`query {
+        boards(ids: ${BOARD_ID}) {
+          groups(ids: "${groupId}") {
+            title
+            items_page(limit: 200${cursorParam}) {
+              cursor
+              items {
+                id
+                name
+                column_values { id text value }
+              }
             }
           }
         }
-      }
-    }`);
-    const group = res?.data?.boards?.[0]?.groups?.[0];
-    if (!group) return { items: [], title: "" };
-    return {
-      title: group.title,
-      items: group.items_page.items.map(itemToDeal)
-    };
+      }`);
+      const group = res?.data?.boards?.[0]?.groups?.[0];
+      if (!group) break;
+      const page = group.items_page;
+      allItems.push(...page.items.map(itemToDeal));
+      cursor = page.cursor || null;
+    } while (cursor);
+
+    return { title: groupId, items: allItems };
   } catch (e) {
     console.error("Monday getGroupItems error:", e.message);
     return { items: [], title: "" };
