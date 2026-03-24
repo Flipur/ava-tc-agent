@@ -194,6 +194,23 @@ export async function getAllActiveDeals() {
   }
 }
 
+export async function getBoardGroups() {
+  try {
+    const res = await mondayQuery(`query {
+      boards(ids: ${BOARD_ID}) {
+        groups {
+          id
+          title
+        }
+      }
+    }`);
+    return res?.data?.boards?.[0]?.groups || [];
+  } catch (e) {
+    console.error("Monday getBoardGroups error:", e.message);
+    return [];
+  }
+}
+
 export async function updateMondayItem({ mondayId, columnId, value }) {
   return mondayQuery(`mutation {
     change_simple_column_value(
