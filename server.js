@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { handleSlackMessage } from "./ava/slackHandler.js";
 import { handleApproval, pendingApprovals } from "./ava/approvalHandler.js";
 import { startEmailPoller } from "./ava/emailPoller.js";
+import { getDealContext, getAllActiveDeals } from "./ava/monday.js";
 dotenv.config();
 
 const receiver = new ExpressReceiver({
@@ -13,6 +14,27 @@ const receiver = new ExpressReceiver({
 });
 
 receiver.router.use(express.json());
+
+receiver.router.get("/monday/active-deals", async (req, res) => {
+  try {
+    const deals = await getAllActiveDeals();
+    res.json({ deals });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+receiver.router.get("/monday/search", async (req, res) => {
+  try {
+    const { term } = req.query;
+    if (!term) return res.status(400).json({ error: "term required" });
+    const result = await getDealContext(term);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 receiver.router.post("/slack/events", (req, res, next) => {
   if (req.body?.type === "url_verification") {
     return res.json({ challenge: req.body.challenge });
