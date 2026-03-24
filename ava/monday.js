@@ -247,6 +247,57 @@ export async function getBoardGroups() {
   }
 }
 
+export async function getAnyBoardItems(boardId) {
+  try {
+    let allItems = [];
+    let cursor = null;
+
+    do {
+      const cursorParam = cursor ? `, cursor: "${cursor}"` : '';
+      const res = await mondayQuery(`query {
+        boards(ids: ${boardId}) {
+          name
+          items_page(limit: 200${cursorParam}) {
+            cursor
+            items {
+              id
+              name
+              column_values { id text value }
+            }
+          }
+        }
+      }`);
+      const board = res?.data?.boards?.[0];
+      if (!board) break;
+      const page = board.items_page;
+      allItems.push(...page.items);
+      cursor = page.cursor || null;
+    } while (cursor);
+
+    return { total: allItems.length, items: allItems };
+  } catch (e) {
+    console.error("Monday getAnyBoardItems error:", e.message);
+    return { total: 0, items: [] };
+  }
+}
+
+export async function getAnyBoardColumns(boardId) {
+  try {
+    const res = await mondayQuery(`query {
+      boards(ids: ${boardId}) {
+        name
+        columns { id title type }
+        groups { id title }
+      }
+    }`);
+    const board = res?.data?.boards?.[0];
+    return board || {};
+  } catch (e) {
+    console.error("Monday getAnyBoardColumns error:", e.message);
+    return {};
+  }
+}
+
 export async function updateMondayItem({ mondayId, columnId, value }) {
   return mondayQuery(`mutation {
     change_simple_column_value(
@@ -266,7 +317,7 @@ export async function createMondayItem({ dealAddress, groupId, columnValues }) {
   }`);
 }
 
-async function mondayQuery(query) {
+export async function mondayQuery(query) {
   const res = await fetch(MONDAY_API, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: process.env.MONDAY_API_KEY },
