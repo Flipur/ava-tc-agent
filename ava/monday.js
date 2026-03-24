@@ -194,6 +194,34 @@ export async function getAllActiveDeals() {
   }
 }
 
+export async function getGroupItems(groupId) {
+  try {
+    const res = await mondayQuery(`query {
+      boards(ids: ${BOARD_ID}) {
+        groups(ids: "${groupId}") {
+          title
+          items_page(limit: 200) {
+            items {
+              id
+              name
+              column_values { id text value }
+            }
+          }
+        }
+      }
+    }`);
+    const group = res?.data?.boards?.[0]?.groups?.[0];
+    if (!group) return { items: [], title: "" };
+    return {
+      title: group.title,
+      items: group.items_page.items.map(itemToDeal)
+    };
+  } catch (e) {
+    console.error("Monday getGroupItems error:", e.message);
+    return { items: [], title: "" };
+  }
+}
+
 export async function getBoardGroups() {
   try {
     const res = await mondayQuery(`query {
