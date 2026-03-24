@@ -5,7 +5,17 @@ import dotenv from "dotenv";
 import { handleSlackMessage } from "./ava/slackHandler.js";
 import { handleApproval, pendingApprovals } from "./ava/approvalHandler.js";
 import { startEmailPoller } from "./ava/emailPoller.js";
-import { getDealContext, getAllActiveDeals, searchDealsByTerm, getGroupItems, getBoardGroups } from "./ava/monday.js";
+import {
+  getDealContext,
+  getAllActiveDeals,
+  searchDealsByTerm,
+  getGroupItems,
+  getBoardGroups,
+  getAnyBoardItems,
+  getAnyBoardColumns,
+  mondayQuery,
+} from "./ava/monday.js";
+
 dotenv.config();
 
 const receiver = new ExpressReceiver({
@@ -14,6 +24,12 @@ const receiver = new ExpressReceiver({
 });
 
 receiver.router.use(express.json());
+
+// ── Health ────────────────────────────────────────────────────────────────────
+
+receiver.router.get("/health", (req, res) => res.send("Ava is online."));
+
+// ── Monday — Escrow board (MONDAY_BOARD_ID) ───────────────────────────────────
 
 receiver.router.get("/monday/active-deals", async (req, res) => {
   try {
@@ -54,12 +70,68 @@ receiver.router.get("/monday/group/:groupId", async (req, res) => {
   }
 });
 
+// ── Monday — Any board by ID ──────────────────────────────────────────────────
+
+receiver.router.get("/monday/board/:boardId/schema", async (req, res) => {
+  try {
+    const data = await getAnyBoardColumns(req.params.boardId);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+receiver.router.get("/monday/board/:boardId/items", async (req, res) => {
+  try {
+    const data = await getAnyBoardItems(req.params.boardId);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+receiver.router.get("/monday/board/:boardId/group/:groupId", async (req, res) => {
+  try {
+    const { boardId, groupId } = req.params;
+    let allItems = [];
+    let cursor = null;
+
+    do {
+      const cursorParam = cursor ? `, cursor: "${cursor}"` : "";
+      const result = await mondayQuery(`query {
+        boards(ids: ${boardId}) {
+          groups(ids: "${groupId}") {
+            title
+            items_page(limit: 200${cursorParam}) {
+              cursor
+              items { id name column_values { id text value } }
+            }
+          }
+        }
+      }`);
+      const group = result?.data?.boards?.[0]?.groups?.[0];
+      if (!group) break;
+      const page = group.items_page;
+      allItems.push(...page.items);
+      cursor = page.cursor || null;
+    } while (cursor);
+
+    res.json({ total: allItems.length, items: allItems });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Slack URL verification ────────────────────────────────────────────────────
+
 receiver.router.post("/slack/events", (req, res, next) => {
   if (req.body?.type === "url_verification") {
     return res.json({ challenge: req.body.challenge });
   }
   next();
 });
+
+// ── Slack App ─────────────────────────────────────────────────────────────────
 
 export const slackApp = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -68,15 +140,22 @@ export const slackApp = new App({
 
 export function isRejection(text) {
   const t = (text || "").toLowerCase();
-  return ["reject", "dont send", "hold", "stop", "revise", "change"].some(k => t.includes(k));
+  return ["reject", "dont send", "hold", "stop", "revise", "change"].some(k =>
+    t.includes(k)
+  );
 }
 
 export function isApproval(text) {
   const t = (text || "").toLowerCase();
-  return ["looks good", "approved", "send it", "lgtm", "go ahead", "yes send", "approve", "yes", "do it", "confirmed", "confirm", "ok send", "send"].some(k => t.includes(k));
+  return [
+    "looks good", "approved", "send it", "lgtm", "go ahead",
+    "yes send", "approve", "yes", "do it", "confirmed", "confirm",
+    "ok send", "send",
+  ].some(k => t.includes(k));
 }
 
 const processedEvents = new Set();
+
 function isDuplicate(eventId) {
   if (!eventId) return false;
   if (processedEvents.has(eventId)) return true;
@@ -95,7 +174,11 @@ slackApp.message(async ({ message, say }) => {
 
   if (threadTs) {
     const hasPending = pendingApprovals.has(threadTs);
-    console.log("Thread reply detected. thread_ts: " + threadTs + ", hasPending: " + hasPending + ", text: " + message.text);
+    console.log(
+      "Thread reply detected. thread_ts: " + threadTs +
+      ", hasPending: " + hasPending +
+      ", text: " + message.text
+    );
     if (hasPending) {
       if (isApproval(message.text) || isRejection(message.text)) {
         await handleApproval({ message, say });
@@ -105,15 +188,15 @@ slackApp.message(async ({ message, say }) => {
   }
 
   const isTaggedThreadReply = !!threadTs && isMention;
-
   if (isMention || isDM || isTaggedThreadReply) {
     await handleSlackMessage({ event: message, say, type: isDM ? "dm" : "mention" });
   }
 });
 
-receiver.router.get("/health", (req, res) => res.send("Ava is online."));
+// ── Start ─────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
+
 (async () => {
   await slackApp.start(PORT);
   console.log("Ava Stone is live on port " + PORT);
