@@ -143,6 +143,22 @@ export async function getDealContext(text) {
   }
 }
 
+export async function searchDealsByTerm(term) {
+  try {
+    const items = await fetchAllItems();
+    const matches = items.filter(i => {
+      const normalizedName = i.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      return normalizedName.includes(term.toLowerCase());
+    });
+    if (matches.length === 0) return { notFound: true };
+    if (matches.length === 1) return itemToDeal(matches[0]);
+    return { deals: matches.map(itemToDeal) };
+  } catch (e) {
+    console.error("Monday searchDealsByTerm error:", e.message);
+    return null;
+  }
+}
+
 export async function getAllActiveDeals() {
   try {
     const res = await mondayQuery(`query {
