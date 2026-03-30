@@ -24,7 +24,7 @@ function extractAddressFromChannelName(channelName) {
   const match = channelName.match(/^(\d+)-(.+)/);
   if (!match) return null;
   const full = channelName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/-usa$/, "").replace(/-/g, " ").trim();
-  return full.split(" ").slice(0, 3).join(" ");
+  return full.split(" ").slice(0, 6).join(" ");
 }
 
 async function getChannelName(channelId) {
@@ -84,14 +84,12 @@ async function readChannelHistory(channelName, weeks = 12) {
 
     console.log("Channel history fetched:", channelName, messages.length, "messages");
 
-    // Resolve user IDs to names
     const uniqueUsers = [...new Set(messages.map(m => m.user).filter(Boolean))];
     const userNames = {};
     for (const uid of uniqueUsers) {
       userNames[uid] = await getUserName(uid);
     }
 
-    // Pre-compute weekly buckets
     const byWeek = {};
     const docTypeTotals = {};
     const requestorTotals = {};
@@ -111,7 +109,6 @@ async function readChannelHistory(channelName, weeks = 12) {
 
       const txt = m.text || "";
 
-      // Document Type
       const dtMatch = txt.match(/\*?Document Type:\*?\s*([^\n<*]+)/i);
       if (dtMatch) {
         const dt = dtMatch[1].trim().toUpperCase();
@@ -119,7 +116,6 @@ async function readChannelHistory(channelName, weeks = 12) {
         docTypeTotals[dt] = (docTypeTotals[dt] || 0) + 1;
       }
 
-      // Requestor — extract Slack user ID then resolve to name
       const rqMatch = txt.match(/\*?Requestor:\*?\s*<@([A-Z0-9]+)>/i);
       if (rqMatch) {
         const rqId = rqMatch[1].trim();
@@ -128,7 +124,6 @@ async function readChannelHistory(channelName, weeks = 12) {
         requestorTotals[rqName] = (requestorTotals[rqName] || 0) + 1;
       }
 
-      // Agent Name
       const agMatch = txt.match(/\*?Agent Name:\*?\s*([^\n<*]+)/i);
       if (agMatch) {
         const ag = agMatch[1].trim();
@@ -226,7 +221,7 @@ export async function handleSlackMessage({ event, say, type }) {
       cleanText.includes("requestor")
     ));
 
-    const isFollowUpAnalysis = !!threadTs && (
+    const isFollowUpAnalysis = !!threadTs && channelMention && (
       cleanText.includes("who") ||
       cleanText.includes("break") ||
       cleanText.includes("sender") ||
@@ -274,6 +269,12 @@ export async function handleSlackMessage({ event, say, type }) {
         ...context,
         channelNote: "You are in the property channel for " + context.deal.address + ". ALL requests are ONLY for this property. Address is locked: " + context.deal.address,
       };
+    } else if (channelAddress && !context.deal) {
+      // Channel is a property channel but deal not found in Monday — still lock address from channel name
+      finalContext = {
+        ...context,
+        channelNote: "You are in a property channel named " + channelName + ". The property address from the channel name is: " + channelAddress + ". Use this address for all requests in this channel.",
+      };
     } else if (context.deal && !channelAddress) {
       const suggestedChannel = await findPropertyChannel(context.deal.address);
       const slug = context.deal.address.split(",")[0].toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -296,6 +297,7 @@ export async function handleSlackMessage({ event, say, type }) {
       ...finalContext,
       slackUser: userId,
       channel,
+      channelId: channel,
       channelHistory: channelHistory || undefined,
     });
 
@@ -303,6 +305,10 @@ export async function handleSlackMessage({ event, say, type }) {
 
     if (action && action.requiresApproval) {
       await say({ text: safeText, thread_ts: replyTs });
+      // Inject channelId into inspection payload
+      if (action.type === "generate_inspection" && action.payload) {
+        action.payload.channelId = channel;
+      }
       const approvalKey = threadTs || ts;
       console.log("Storing pending approval with key: " + approvalKey);
       pendingApprovals.set(approvalKey, {
