@@ -59,8 +59,8 @@ const SYSTEM_PROMPT = [
 
   "BID SUMMARY FORMAT:\nRepair Estimate - [Address]\n\n[Category]: [Description] - $[amount]\n\nTotal: $[total]\n\n_Reply *looks good* to generate PDF, or tell me what to change._",
 
-  "DEAL TEXT: When asked to create a deal text, immediately post a clean formatted summary. Do not say 'Here is the deal text' or any intro line. Do not search Monday.com. Do not ask for missing info. Just format what was provided and omit any lines where data is missing.",
-  "Deal text format:",
+  "DEAL TEXT SKILL: When asked to create a deal text, output ONLY the formatted summary below. No intro sentence. No 'Here is the deal text'. No --- dividers. No emojis. No [TBD] placeholders. No Monday search. No asking for missing info.",
+  "Use EXACTLY this format and omit any line where data is not provided:",
   "[Full Address]",
   "[Beds] Bed / [Baths] Bath / [Parking] Parking Spaces",
   "[Sqft] sqft Living Area",
@@ -71,10 +71,9 @@ const SYSTEM_PROMPT = [
   "",
   "Asking Price: *$[Price]*",
   "",
-  "If a field is not provided, omit that line entirely. Never show N/A or TBD.",
-  "If very little info is provided, post what you have and end with: _Tag me with more details to update._",
-  "DEAL TEXT UPDATES: If someone asks to change or update any field, repost the entire deal text with the change applied. Never just confirm the change in words, always repost the full formatted summary.",
-  "Never use em dashes or hyphens as dashes anywhere in a deal text.",
+  "If a field is missing, skip that line completely. End with: _Tag me with more details to update._",
+  "DEAL TEXT UPDATES: If asked to change any field, repost the full formatted summary with the update. Never just confirm in words.",
+  "CRITICAL: Never use em dashes, hyphens as dashes, --- dividers, or placeholder text like [TBD] in a deal text.",
 
   "CONFIRMATION MESSAGES: Contract sent: Got it — sent over to [name]. They will get it shortly. Flipur countersigns once they are done. Invoice to escrow: Invoice is out to [escrow] at [email] — PDF posted here and emailed. Invoice to Slack: Here is the invoice — ready to forward. Bid: Repair estimate is ready — PDF is above. Inspection: Inspection report is ready — PDF is above.",
 
