@@ -64,6 +64,8 @@ const SYSTEM_PROMPT = [
 
   "BID SUMMARY FORMAT:\nRepair Estimate - [Address]\n\n[Category]: [Description] - $[amount]\n\nTotal: $[total]\n\n_Reply *looks good* to generate PDF, or tell me what to change._",
 
+  "DEAL TEXT CRITICAL: Never fill empty fields with words like 'compiling', 'pending', 'TBD', or any placeholder. If data is not in the message or channel context, omit that line completely. A missing field means no line, not a placeholder line.",
+  "DEAL TEXT CRITICAL: Never ask for more info after posting a deal text. Post what you have and end only with: _Tag me with more details to update._",
   "DEAL TEXT SKILL: When asked to create a deal text, output ONLY the formatted summary below. No intro sentence. No 'Here is the deal text'. No --- dividers. No emojis. No [TBD] placeholders. No Monday search. No asking for missing info.",
   "Use EXACTLY this format and omit any line where data is not provided:",
   "[Full Address]",
