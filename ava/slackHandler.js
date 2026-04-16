@@ -293,12 +293,26 @@ export async function handleSlackMessage({ event, say, type }) {
       channelHistory = await readChannelHistory(lookupName, 12);
     }
 
+    let recentMessages = undefined;
+    if (channelAddress && finalContext.notFound) {
+      try {
+        const recent = await slackApp.client.conversations.history({ channel, limit: 15 });
+        recentMessages = (recent.messages || [])
+          .map(m => (m.text || "").replace(/<@[A-Z0-9]+>/g, "").trim())
+          .filter(Boolean)
+          .join("\n");
+      } catch (e) {
+        console.error("Failed to fetch recent messages for deal text context:", e.message);
+      }
+    }
+
     const { text: avaResponse, action } = await askAva(messages, {
       ...finalContext,
       slackUser: userId,
       channel,
       channelId: channel,
       channelHistory: channelHistory || undefined,
+      recentMessages,
     });
 
     const safeText = (avaResponse || "").trim() || "On it.";

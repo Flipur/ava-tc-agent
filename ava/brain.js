@@ -64,6 +64,7 @@ const SYSTEM_PROMPT = [
 
   "BID SUMMARY FORMAT:\nRepair Estimate - [Address]\n\n[Category]: [Description] - $[amount]\n\nTotal: $[total]\n\n_Reply *looks good* to generate PDF, or tell me what to change._",
 
+  "DEAL TEXT DATA SOURCE: Before building a deal text, check recentMessages first for property details already posted in this channel. Then check the deal context if available. Build the deal text from whatever data you find in either source. Never say you cannot find the data if it exists in recentMessages or the deal context.",
   "DEAL TEXT: When asked to create a deal text, output ONLY the lines below that have real data available. Each line is either included with real data or not included at all. Never substitute placeholder words for missing data.",
   "Line 1: The full property address. Always include if known.",
   "Line 2: [X] Bed / [X] Bath / [X] Parking Spaces. Only include if bed/bath info is known.",
@@ -146,7 +147,8 @@ export async function askAva(messages, context) {
   if (ctx.deal)        system += "\n\nDeal context from Monday:\n" + JSON.stringify(ctx.deal, null, 2);
   if (ctx.deals)       system += "\n\nMultiple deals found — ask which one:\n" + JSON.stringify(ctx.deals, null, 2);
   if (ctx.notFound)    system += "\n\nNo deal found in Monday for that property.";
-  if (ctx.slackUser)   system += "\n\nMessage from Slack user ID: " + ctx.slackUser;
+  if (ctx.slackUser)      system += "\n\nMessage from Slack user ID: " + ctx.slackUser;
+  if (ctx.recentMessages) system += "\n\nRecent messages from this channel:\n" + ctx.recentMessages;
 
   if (ctx.channelHistory) {
     const h = ctx.channelHistory;
