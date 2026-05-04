@@ -1,6 +1,7 @@
 import { askAva } from "./brain.js";
 import { executeAction } from "./actionExecutor.js";
 import { getDealContext } from "./monday.js";
+import { getCloseContext } from "./close.js";
 import { pendingApprovals, handleApproval } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
 
@@ -306,6 +307,20 @@ export async function handleSlackMessage({ event, say, type }) {
       }
     }
 
+    // Fetch Close CRM context when message involves a buyer, contact, or the deal has a buyer name
+    let closeContext = undefined;
+    const closeKeywords = /buyer|contact|call|sms|text|email|reach|phone|lead|who is|info on|history/i;
+    const buyerName = context.deal?.buyer || "";
+    const closeQuery = buyerName ||
+      (closeKeywords.test(cleanText) ? cleanText.replace(/<@[A-Z0-9]+>/g, "").replace(/[?!]/g, "").trim() : null);
+    if (closeQuery) {
+      try {
+        closeContext = await getCloseContext(closeQuery);
+      } catch (e) {
+        console.error("Close context fetch error:", e.message);
+      }
+    }
+
     const { text: avaResponse, action } = await askAva(messages, {
       ...finalContext,
       slackUser: userId,
@@ -313,6 +328,7 @@ export async function handleSlackMessage({ event, say, type }) {
       channelId: channel,
       channelHistory: channelHistory || undefined,
       recentMessages,
+      closeContext: closeContext || undefined,
     });
 
     const safeText = (avaResponse || "").trim() || "On it.";
