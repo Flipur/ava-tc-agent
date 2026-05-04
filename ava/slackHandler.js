@@ -184,7 +184,16 @@ export async function handleSlackMessage({ event, say, type }) {
     return;
   }
 
+  const addReaction = async (name) => {
+    try { await slackApp.client.reactions.add({ channel, name, timestamp: ts }); } catch {}
+  };
+  const removeReaction = async (name) => {
+    try { await slackApp.client.reactions.remove({ channel, name, timestamp: ts }); } catch {}
+  };
+
   try {
+    await addReaction("eyes");
+
     let messages = [];
     if (threadTs && !isDM) {
       try {
@@ -333,6 +342,8 @@ export async function handleSlackMessage({ event, say, type }) {
 
     const safeText = (avaResponse || "").trim() || "On it.";
 
+    await removeReaction("eyes");
+
     if (action && action.requiresApproval) {
       await say({ text: safeText, thread_ts: replyTs });
       // Inject channelId into inspection payload
@@ -356,6 +367,7 @@ export async function handleSlackMessage({ event, say, type }) {
     }
   } catch (err) {
     console.error("Ava slackHandler error:", err);
+    await removeReaction("eyes");
     await say({ text: "Hit an error on my end. Let me know if you need me to retry.", thread_ts: replyTs });
   }
 }
