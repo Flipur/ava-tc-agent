@@ -206,6 +206,19 @@ export async function handleSlackMessage({ event, say, type }) {
       } catch (e) {
         messages = [{ role: "user", content: cleanText }];
       }
+    } else if (isDM) {
+      try {
+        const dmHistory = await slackApp.client.conversations.history({ channel, limit: 12 });
+        const dmMessages = (dmHistory.messages || []).reverse();
+        for (const msg of dmMessages) {
+          const msgText = (msg.text || "").replace(/<@[A-Z0-9]+>/g, "").trim();
+          if (!msgText) continue;
+          messages.push({ role: (msg.app_id || msg.bot_id) ? "assistant" : "user", content: msgText });
+        }
+      } catch (e) {
+        messages = [{ role: "user", content: cleanText }];
+      }
+      if (!messages.length) messages = [{ role: "user", content: cleanText }];
     } else {
       messages = [{ role: "user", content: cleanText }];
     }
@@ -320,7 +333,9 @@ export async function handleSlackMessage({ event, say, type }) {
     let closeContext = undefined;
     const closeKeywords = /buyer|contact|call|sms|text|email|reach|phone|lead|who is|info on|history/i;
     const buyerName = context.deal?.buyer || "";
-    const closeQuery = buyerName ||
+    const phoneMatch = cleanText.match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
+    const emailMatch = cleanText.match(/[\w.+\-]+@[\w\-]+\.\w+/);
+    const closeQuery = buyerName || phoneMatch?.[0] || emailMatch?.[0] ||
       (closeKeywords.test(cleanText) ? cleanText.replace(/<@[A-Z0-9]+>/g, "").replace(/[?!]/g, "").trim() : null);
     if (closeQuery) {
       try {

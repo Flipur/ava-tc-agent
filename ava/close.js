@@ -24,7 +24,10 @@ async function closePost(path, body) {
 
 export async function searchCloseLeads(query) {
   try {
-    const data = await closeGet(`/lead/?query=${encodeURIComponent(query)}&_limit=10&_fields=id,display_name,status_label,contacts,opportunities,addresses`);
+    // Phone numbers need the phone_number: prefix in Close's query syntax
+    const isPhone = /^\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}$/.test(query.trim());
+    const q = isPhone ? `phone_number:"${query.trim()}"` : query;
+    const data = await closeGet(`/lead/?query=${encodeURIComponent(q)}&_limit=10&_fields=id,display_name,status_label,contacts,opportunities,addresses`);
     return data.data || [];
   } catch (e) {
     console.error("searchCloseLeads error:", e.message);
