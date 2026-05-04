@@ -16,7 +16,7 @@ function loadPending() {
   return new Map();
 }
 
-function savePending(map) {
+export function savePending(map) {
   try {
     const obj = {};
     for (const [k, v] of map.entries()) obj[k] = v;

@@ -2,7 +2,7 @@ import { askAva } from "./brain.js";
 import { executeAction } from "./actionExecutor.js";
 import { getDealContext } from "./monday.js";
 import { getCloseContext } from "./close.js";
-import { pendingApprovals, handleApproval } from "./approvalHandler.js";
+import { pendingApprovals, handleApproval, savePending } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
 
 const dmDealCache = new Map();
@@ -180,8 +180,22 @@ export async function handleSlackMessage({ event, say, type }) {
   const replyTs = isDM ? undefined : (threadTs || ts);
 
   if (threadTs && pendingApprovals.has(threadTs)) {
-    await handleApproval({ message: { ...event, text: cleanText }, say });
-    return;
+    const pending = pendingApprovals.get(threadTs);
+
+    // Auto-clear approvals older than 15 minutes — thread shouldn't stay locked forever
+    if (pending && Date.now() - (pending.createdAt || 0) > 15 * 60 * 1000) {
+      pendingApprovals.delete(threadTs);
+      savePending(pendingApprovals);
+    } else {
+      // New task requests in a pending thread should bypass the approval lock
+      const newTaskPattern = /invoice|contract|deal text|inspection|bid|email|docusign|assign|report|estimate/i;
+      const isNewTask = newTaskPattern.test(cleanText);
+      if (!isNewTask) {
+        await handleApproval({ message: { ...event, text: cleanText }, say });
+        return;
+      }
+      // Falls through to normal handling below
+    }
   }
 
   const addReaction = async (name) => {
