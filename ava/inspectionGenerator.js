@@ -72,16 +72,25 @@ export async function scanChannelForContext(channelId) {
 }
 
 async function analyzePhotosWithVision(photos, acqNotes) {
-  const imageContents = [];
-  for (const photo of photos.slice(0, 14)) {
-    if (!photo.url) continue;
+  // Fetch photos in parallel — cap at 8 to keep token count and latency reasonable
+  const selected = photos.filter(p => p.url).slice(0, 8);
+  const fetched = await Promise.all(selected.map(async (photo) => {
     try {
       const response = await fetch(photo.url);
       const buffer = await response.arrayBuffer();
       const base64 = Buffer.from(buffer).toString("base64");
-      imageContents.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } });
-      if (photo.caption) imageContents.push({ type: "text", text: "Caption: " + photo.caption });
-    } catch (e) { console.error("Failed to fetch photo:", e.message); }
+      return { base64, caption: photo.caption || null };
+    } catch (e) {
+      console.error("Failed to fetch photo:", e.message);
+      return null;
+    }
+  }));
+
+  const imageContents = [];
+  for (const item of fetched) {
+    if (!item) continue;
+    imageContents.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: item.base64 } });
+    if (item.caption) imageContents.push({ type: "text", text: "Caption: " + item.caption });
   }
   if (imageContents.length === 0 && !acqNotes) return null;
 
@@ -141,7 +150,7 @@ Respond ONLY with valid JSON, no markdown, no backticks:
 }`;
 
   const res = await claude.messages.create({
-    model: "claude-opus-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 6000,
     messages: [{
       role: "user",

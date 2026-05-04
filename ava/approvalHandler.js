@@ -58,12 +58,34 @@ export async function handleApproval({ message, say }) {
   // Approved — execute
   pendingApprovals.delete(threadTs);
   savePending(pendingApprovals);
+
+  const channel = message.channel;
+  const addReaction = async () => {
+    try { await slackApp.client.reactions.add({ channel, name: "eyes", timestamp: message.ts }); } catch {}
+  };
+  const removeReaction = async () => {
+    try { await slackApp.client.reactions.remove({ channel, name: "eyes", timestamp: message.ts }); } catch {}
+  };
+
+  await addReaction();
+
+  // For slow actions, post an immediate acknowledgment so the user knows work is happening
+  const slowActions = ["generate_inspection", "generate_bid"];
+  if (slowActions.includes(pending.action.type)) {
+    const msgs = {
+      generate_inspection: "On it — pulling photos and building the report now. This one takes a couple minutes.",
+      generate_bid: "Building the estimate now — give me a sec.",
+    };
+    await say({ text: msgs[pending.action.type], channel, thread_ts: threadTs });
+  }
+
   try {
     const result = await executeAction(pending.action);
+    await removeReaction();
     if (result.pdfBuffer && result.fileName) {
       try {
         await slackApp.client.files.uploadV2({
-          channel_id: message.channel,
+          channel_id: channel,
           thread_ts: threadTs,
           filename: result.fileName,
           file: result.pdfBuffer,
@@ -71,13 +93,14 @@ export async function handleApproval({ message, say }) {
         });
       } catch (uploadErr) {
         console.error("Failed to upload PDF:", uploadErr.message);
-        await say({ text: "Document generated but could not upload: " + uploadErr.message, channel: message.channel, thread_ts: threadTs });
+        await say({ text: "Document generated but upload failed: " + uploadErr.message, channel, thread_ts: threadTs });
       }
     } else {
-      await say({ text: "Done. " + result.summary, channel: message.channel, thread_ts: threadTs });
+      await say({ text: result.summary || "Done.", channel, thread_ts: threadTs });
     }
   } catch (err) {
     console.error("Action execution failed:", err);
-    await say({ text: "Ran into an issue: " + err.message + ". Want me to retry?", channel: message.channel, thread_ts: threadTs });
+    await removeReaction();
+    await say({ text: "Ran into an issue: " + err.message + ". Want me to retry?", channel, thread_ts: threadTs });
   }
 }
