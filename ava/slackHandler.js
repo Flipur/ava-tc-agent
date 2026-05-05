@@ -198,15 +198,31 @@ export async function handleSlackMessage({ event, say, type }) {
     }
   }
 
-  const addReaction = async (name) => {
-    try { await slackApp.client.reactions.add({ channel, name, timestamp: ts }); } catch {}
+  let thinkingMsgTs = null;
+
+  const addReaction = async () => {
+    try {
+      await slackApp.client.reactions.add({ channel, name: "hourglass_flowing_sand", timestamp: ts });
+    } catch (e) {
+      // reactions:write scope missing — fall back to a typed "thinking" message
+      try {
+        const r = await slackApp.client.chat.postMessage({ channel, text: "⏳", thread_ts: replyTs });
+        thinkingMsgTs = r.ts;
+      } catch {}
+    }
   };
-  const removeReaction = async (name) => {
-    try { await slackApp.client.reactions.remove({ channel, name, timestamp: ts }); } catch {}
+  const removeReaction = async () => {
+    try {
+      await slackApp.client.reactions.remove({ channel, name: "hourglass_flowing_sand", timestamp: ts });
+    } catch {}
+    if (thinkingMsgTs) {
+      try { await slackApp.client.chat.delete({ channel, ts: thinkingMsgTs }); } catch {}
+      thinkingMsgTs = null;
+    }
   };
 
   try {
-    await addReaction("eyes");
+    await addReaction();
 
     let messages = [];
     if (threadTs && !isDM) {
@@ -222,7 +238,7 @@ export async function handleSlackMessage({ event, say, type }) {
       }
     } else if (isDM) {
       try {
-        const dmHistory = await slackApp.client.conversations.history({ channel, limit: 12 });
+        const dmHistory = await slackApp.client.conversations.history({ channel, limit: 25 });
         const dmMessages = (dmHistory.messages || []).reverse();
         for (const msg of dmMessages) {
           const msgText = (msg.text || "").replace(/<@[A-Z0-9]+>/g, "").trim();
@@ -234,7 +250,28 @@ export async function handleSlackMessage({ event, say, type }) {
       }
       if (!messages.length) messages = [{ role: "user", content: cleanText }];
     } else {
-      messages = [{ role: "user", content: cleanText }];
+      // Channel mention (not a thread, not a DM) — fetch recent channel history so AVA
+      // knows what was being discussed before she was tagged
+      try {
+        const hist = await slackApp.client.conversations.history({ channel, limit: 25 });
+        const prior = (hist.messages || []).reverse();
+        const uniqueUsers = [...new Set(prior.map(m => m.user).filter(Boolean))];
+        const nameMap = {};
+        await Promise.all(uniqueUsers.map(async uid => {
+          nameMap[uid] = await getUserName(uid);
+        }));
+        for (const msg of prior) {
+          const msgText = (msg.text || "").replace(/<@[A-Z0-9]+>/g, "").trim();
+          if (!msgText) continue;
+          const isBot = !!(msg.app_id || msg.bot_id);
+          const speaker = isBot ? null : (nameMap[msg.user] || msg.user);
+          const content = speaker ? speaker + ": " + msgText : msgText;
+          messages.push({ role: isBot ? "assistant" : "user", content });
+        }
+      } catch (e) {
+        messages = [{ role: "user", content: cleanText }];
+      }
+      if (!messages.length) messages = [{ role: "user", content: cleanText }];
     }
 
     const channelMention = cleanText.match(/<#([A-Z0-9]+)\|([\w-]+)>/) || cleanText.match(/#([\w-]+)/);
@@ -387,7 +424,7 @@ export async function handleSlackMessage({ event, say, type }) {
 
     const safeText = (avaResponse || "").trim() || "On it.";
 
-    await removeReaction("eyes");
+    await removeReaction();
 
     if (action && action.requiresApproval) {
       await say({ text: safeText, thread_ts: replyTs });
@@ -412,7 +449,7 @@ export async function handleSlackMessage({ event, say, type }) {
     }
   } catch (err) {
     console.error("Ava slackHandler error:", err);
-    await removeReaction("eyes");
+    await removeReaction();
     await say({ text: "Hit an error on my end. Let me know if you need me to retry.", thread_ts: replyTs });
   }
 }

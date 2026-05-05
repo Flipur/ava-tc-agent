@@ -60,11 +60,23 @@ export async function handleApproval({ message, say }) {
   savePending(pendingApprovals);
 
   const channel = message.channel;
+  let thinkingMsgTs = null;
   const addReaction = async () => {
-    try { await slackApp.client.reactions.add({ channel, name: "eyes", timestamp: message.ts }); } catch {}
+    try {
+      await slackApp.client.reactions.add({ channel, name: "hourglass_flowing_sand", timestamp: message.ts });
+    } catch {
+      try {
+        const r = await slackApp.client.chat.postMessage({ channel, text: "⏳", thread_ts: threadTs });
+        thinkingMsgTs = r.ts;
+      } catch {}
+    }
   };
   const removeReaction = async () => {
-    try { await slackApp.client.reactions.remove({ channel, name: "eyes", timestamp: message.ts }); } catch {}
+    try { await slackApp.client.reactions.remove({ channel, name: "hourglass_flowing_sand", timestamp: message.ts }); } catch {}
+    if (thinkingMsgTs) {
+      try { await slackApp.client.chat.delete({ channel, ts: thinkingMsgTs }); } catch {}
+      thinkingMsgTs = null;
+    }
   };
 
   await addReaction();
