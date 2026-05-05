@@ -1,13 +1,17 @@
 import { fetchUnreadEmails } from "./gmail.js";
 import { askAva } from "./brain.js";
 import { slackApp } from "../server.js";
-import { pendingApprovals } from "./approvalHandler.js";
+import { pendingApprovals, savePending } from "./approvalHandler.js";
 
-const SLACK_CHANNEL = process.env.SLACK_ALERT_CHANNEL || "general";
+const TC_CHANNEL = process.env.SLACK_TC_CHANNEL;
 const POLL_INTERVAL = 2 * 60 * 1000;
 
 export function startEmailPoller() {
-  console.log("Ava email poller started — checking every 2 minutes");
+  if (!TC_CHANNEL) {
+    console.error("SLACK_TC_CHANNEL not set — email poller disabled");
+    return;
+  }
+  console.log("Ava email poller started — checking every 2 minutes, approvals → #tc");
   setInterval(pollEmails, POLL_INTERVAL);
   pollEmails();
 }
@@ -30,16 +34,18 @@ async function processEmail(email) {
   const allCc = email.allRecipients.filter(r => r !== email.replyTo).join(", ");
 
   const prompt = [
-    "You received an email. Read it and decide what to do.",
+    "You received an email. Read it and draft a reply if one is needed.",
     "From: " + email.from,
     "Subject: " + email.subject,
     "All recipients (Reply All): To=" + allTo + (allCc ? " CC=" + allCc : ""),
     "Body: " + email.body,
     "",
-    "REPLY ALL RULE: When drafting a reply, always reply to ALL recipients unless it is spam, automated, or a no-reply email.",
-    "Use to: " + allTo + " and cc: " + allCc + " in your action payload.",
+    "REPLY ALL RULE: Always reply to ALL recipients unless spam, automated, or no-reply.",
+    "Use to: " + allTo + " and cc: " + allCc + " in your send_email payload.",
+    "APPROVAL REQUIRED: Every send_email action MUST have requiresApproval: true. Never auto-send.",
     "If no reply needed (spam, automated, no-reply), use slack_message action.",
-    "Keep your Slack summary to one line max.",
+    "Keep your Slack summary brief — what the email is about and what you drafted.",
+    "End with: _Reply *looks good* to send, or tell me what to change._",
   ].join("\n");
 
   const { text: avaResponse, action } = await askAva(
@@ -47,20 +53,26 @@ async function processEmail(email) {
     {}
   );
 
+  // Force requiresApproval for any email action regardless of what AVA returned
+  if (action && action.type === "send_email") {
+    action.requiresApproval = true;
+  }
+
   const fromName = email.from.split("<")[0].trim() || email.from;
   const header = "*New email* from *" + fromName + "*\n*Subject:* " + email.subject;
 
   const slackMsg = await slackApp.client.chat.postMessage({
-    channel: SLACK_CHANNEL,
+    channel: TC_CHANNEL,
     text: header + "\n\n" + avaResponse,
   });
 
   if (action && action.requiresApproval) {
     pendingApprovals.set(slackMsg.ts, {
       action,
-      channel: SLACK_CHANNEL,
+      channel: TC_CHANNEL,
       requestedBy: "email_poller",
       createdAt: Date.now(),
     });
+    savePending(pendingApprovals);
   }
 }
