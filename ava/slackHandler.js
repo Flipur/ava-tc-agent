@@ -4,6 +4,7 @@ import { getDealContext, getAllActiveDeals, getDeadlineDeals } from "./monday.js
 import { getCloseContext } from "./close.js";
 import { pendingApprovals, handleApproval, savePending } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
+import { getMemoryContext } from "./memory.js";
 
 const dmDealCache = new Map();
 const userNameCache = new Map();
@@ -392,6 +393,8 @@ export async function handleSlackMessage({ event, say, type }) {
       try { deadlineDeals = await getDeadlineDeals(); } catch (e) { console.error("getDeadlineDeals error:", e.message); }
     }
 
+    const memoryContext = getMemoryContext();
+
     const { text: avaResponse, action } = await askAva(messages, {
       ...finalContext,
       slackUser: userId,
@@ -402,6 +405,7 @@ export async function handleSlackMessage({ event, say, type }) {
       closeContext: closeContext || undefined,
       activeDeals: activeDeals || undefined,
       deadlineDeals: deadlineDeals || undefined,
+      memoryContext: memoryContext || undefined,
     });
 
     const safeText = (avaResponse || "").trim() || "On it.";

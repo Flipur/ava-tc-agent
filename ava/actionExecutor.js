@@ -5,6 +5,7 @@ import { updateCloseDeal } from "./close.js";
 import { generateEscrowInvoice } from "./invoiceGenerator.js";
 import { generateBidPDF } from "./bidGenerator.js";
 import { createInspectionReport } from "./inspectionGenerator.js";
+import { updateMemory } from "./memory.js";
 
 export async function executeAction(action) {
   switch (action.type) {
@@ -88,6 +89,11 @@ export async function executeAction(action) {
         body,
       });
       return { summary: "Buyer intro sent to " + p.escrowAgent + " at " + (p.escrowCompany || p.escrowEmail) + ". Copied " + p.signerName + "." };
+    }
+    case "remember": {
+      const { category, key, content } = action.payload;
+      updateMemory(category || "general", key, content);
+      return { summary: "Got it — remembered." };
     }
     case "slack_message":
       return { summary: "Slack message sent." };

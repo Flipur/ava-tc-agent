@@ -2,6 +2,7 @@ import { executeAction } from "./actionExecutor.js";
 import { askAva } from "./brain.js";
 import { isRejection } from "../server.js";
 import { slackApp } from "../server.js";
+import { getMemoryContext } from "./memory.js";
 import fs from "fs";
 
 const PENDING_FILE = "/tmp/pendingApprovals.json";
@@ -35,7 +36,7 @@ export async function handleApproval({ message, say }) {
   if (isRejection(text)) {
     const { text: revised, action: newAction } = await askAva(
       [{ role: "user", content: "You previously drafted: " + JSON.stringify(pending.action) + ". Change requested: " + text + ". Revise and show for approval." }],
-      { deal: pending.dealContext || null }
+      { deal: pending.dealContext || null, memoryContext: getMemoryContext() || undefined }
     );
     if (newAction && newAction.requiresApproval) {
       pendingApprovals.set(threadTs, {
