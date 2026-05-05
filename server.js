@@ -344,6 +344,13 @@ slackApp.message(async ({ message, say }) => {
   if (!message.text || message.subtype) return;
   if (isDuplicate(message.event_ts || message.ts)) return;
 
+  // Fire hourglass immediately — before ANY async work so it appears right away
+  slackApp.client.reactions.add({
+    channel: message.channel,
+    name: "hourglass_flowing_sand",
+    timestamp: message.ts,
+  }).catch(() => {});
+
   const threadTs = message.thread_ts;
   const isMention = message.text.includes(
     `<@${process.env.SLACK_BOT_USER_ID}>`

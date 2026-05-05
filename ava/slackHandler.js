@@ -198,31 +198,13 @@ export async function handleSlackMessage({ event, say, type }) {
     }
   }
 
-  let thinkingMsgTs = null;
-
-  const addReaction = async () => {
-    try {
-      await slackApp.client.reactions.add({ channel, name: "hourglass_flowing_sand", timestamp: ts });
-    } catch (e) {
-      // reactions:write scope missing — fall back to a typed "thinking" message
-      try {
-        const r = await slackApp.client.chat.postMessage({ channel, text: "⏳", thread_ts: replyTs });
-        thinkingMsgTs = r.ts;
-      } catch {}
-    }
-  };
-  const removeReaction = async () => {
-    try {
-      await slackApp.client.reactions.remove({ channel, name: "hourglass_flowing_sand", timestamp: ts });
-    } catch {}
-    if (thinkingMsgTs) {
-      try { await slackApp.client.chat.delete({ channel, ts: thinkingMsgTs }); } catch {}
-      thinkingMsgTs = null;
-    }
+  // Reaction was already added in server.js the moment the message arrived.
+  // Here we just need to remove it when AVA finishes responding.
+  const removeReaction = () => {
+    slackApp.client.reactions.remove({ channel, name: "hourglass_flowing_sand", timestamp: ts }).catch(() => {});
   };
 
   try {
-    await addReaction();
 
     let messages = [];
     if (threadTs && !isDM) {

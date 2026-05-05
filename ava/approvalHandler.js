@@ -60,26 +60,10 @@ export async function handleApproval({ message, say }) {
   savePending(pendingApprovals);
 
   const channel = message.channel;
-  let thinkingMsgTs = null;
-  const addReaction = async () => {
-    try {
-      await slackApp.client.reactions.add({ channel, name: "hourglass_flowing_sand", timestamp: message.ts });
-    } catch {
-      try {
-        const r = await slackApp.client.chat.postMessage({ channel, text: "⏳", thread_ts: threadTs });
-        thinkingMsgTs = r.ts;
-      } catch {}
-    }
+  // Reaction already added in server.js — just remove when done
+  const removeReaction = () => {
+    slackApp.client.reactions.remove({ channel, name: "hourglass_flowing_sand", timestamp: message.ts }).catch(() => {});
   };
-  const removeReaction = async () => {
-    try { await slackApp.client.reactions.remove({ channel, name: "hourglass_flowing_sand", timestamp: message.ts }); } catch {}
-    if (thinkingMsgTs) {
-      try { await slackApp.client.chat.delete({ channel, ts: thinkingMsgTs }); } catch {}
-      thinkingMsgTs = null;
-    }
-  };
-
-  await addReaction();
 
   // For slow actions, post an immediate acknowledgment so the user knows work is happening
   const slowActions = ["generate_inspection", "generate_bid"];
