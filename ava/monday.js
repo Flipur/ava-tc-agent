@@ -317,6 +317,35 @@ export async function createMondayItem({ dealAddress, groupId, columnValues }) {
   }`);
 }
 
+// Returns deals with COE within 7 days or overdue EMD — for proactive flags
+export async function getDeadlineDeals() {
+  try {
+    const deals = await getAllActiveDeals();
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    const urgent = [];
+    for (const deal of deals) {
+      const flags = [];
+      if (deal.coe) {
+        const coeMs = new Date(deal.coe).getTime();
+        const diff = coeMs - now;
+        if (diff < 0) flags.push("COE OVERDUE (" + deal.coe + ")");
+        else if (diff < sevenDays) flags.push("COE in " + Math.ceil(diff / 86400000) + " days (" + deal.coe + ")");
+      }
+      if (deal.emdDue) {
+        const emdMs = new Date(deal.emdDue).getTime();
+        if (emdMs < now) flags.push("EMD OVERDUE (due " + deal.emdDue + ")");
+        else if (emdMs - now < 2 * 24 * 60 * 60 * 1000) flags.push("EMD due soon (" + deal.emdDue + ")");
+      }
+      if (flags.length) urgent.push({ ...deal, flags });
+    }
+    return urgent;
+  } catch (e) {
+    console.error("getDeadlineDeals error:", e.message);
+    return [];
+  }
+}
+
 export async function mondayQuery(query) {
   const res = await fetch(MONDAY_API, {
     method: "POST",

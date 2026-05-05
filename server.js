@@ -3,7 +3,7 @@ const { App, ExpressReceiver } = pkg;
 import express from "express";
 import dotenv from "dotenv";
 import { handleSlackMessage } from "./ava/slackHandler.js";
-import { handleApproval, pendingApprovals } from "./ava/approvalHandler.js";
+import { handleApproval, pendingApprovals, savePending } from "./ava/approvalHandler.js";
 import { startEmailPoller } from "./ava/emailPoller.js";
 import {
   getDealContext,
@@ -351,10 +351,20 @@ slackApp.message(async ({ message, say }) => {
         message.text
     );
     if (hasPending) {
-      if (isApproval(message.text) || isRejection(message.text)) {
-        await handleApproval({ message, say });
+      const pending = pendingApprovals.get(threadTs);
+      const isStale = pending && Date.now() - (pending.createdAt || 0) > 15 * 60 * 1000;
+      const newTaskPattern = /invoice|contract|deal text|inspection|bid|email|docusign|assign|report|estimate|intro/i;
+      const isNewTask = newTaskPattern.test(message.text);
+      if (isStale) {
+        pendingApprovals.delete(threadTs);
+        savePending(pendingApprovals);
+      } else if (!isNewTask) {
+        if (isApproval(message.text) || isRejection(message.text)) {
+          await handleApproval({ message, say });
+        }
+        return;
       }
-      return;
+      // stale or new task — fall through to handleSlackMessage
     }
   }
 

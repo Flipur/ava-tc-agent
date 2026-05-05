@@ -1,6 +1,6 @@
 import { askAva } from "./brain.js";
 import { executeAction } from "./actionExecutor.js";
-import { getDealContext } from "./monday.js";
+import { getDealContext, getAllActiveDeals, getDeadlineDeals } from "./monday.js";
 import { getCloseContext } from "./close.js";
 import { pendingApprovals, handleApproval, savePending } from "./approvalHandler.js";
 import { slackApp } from "../server.js";
@@ -359,6 +359,20 @@ export async function handleSlackMessage({ event, say, type }) {
       }
     }
 
+    // Active deal status board
+    let activeDeals = undefined;
+    const statusBoardPattern = /active deals|status board|what.?s active|all deals|deal board|open deals|pipeline|what do we have/i;
+    if (statusBoardPattern.test(cleanText)) {
+      try { activeDeals = await getAllActiveDeals(); } catch (e) { console.error("getAllActiveDeals error:", e.message); }
+    }
+
+    // Proactive deadline flags — inject for #tc channel or when explicitly asked
+    let deadlineDeals = undefined;
+    const deadlinePattern = /deadline|emd|coe|due|closing|urgent|flag/i;
+    if (deadlinePattern.test(cleanText) || channel === process.env.SLACK_TC_CHANNEL) {
+      try { deadlineDeals = await getDeadlineDeals(); } catch (e) { console.error("getDeadlineDeals error:", e.message); }
+    }
+
     const { text: avaResponse, action } = await askAva(messages, {
       ...finalContext,
       slackUser: userId,
@@ -367,6 +381,8 @@ export async function handleSlackMessage({ event, say, type }) {
       channelHistory: channelHistory || undefined,
       recentMessages,
       closeContext: closeContext || undefined,
+      activeDeals: activeDeals || undefined,
+      deadlineDeals: deadlineDeals || undefined,
     });
 
     const safeText = (avaResponse || "").trim() || "On it.";

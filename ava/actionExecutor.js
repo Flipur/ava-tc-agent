@@ -60,6 +60,35 @@ export async function executeAction(action) {
     case "update_close":
       await updateCloseDeal(action.payload);
       return { summary: "Close CRM updated." };
+    case "send_escrow_intro": {
+      const p = action.payload;
+      const body = [
+        "Hi " + (p.escrowAgent ? p.escrowAgent.split(" ")[0] : "there") + ",",
+        "",
+        "Introducing your buyer for " + p.propertyAddress + ":",
+        "",
+        "Buyer: " + p.signerName,
+        "Entity: " + (p.assigneeName || p.signerName),
+        "Email: " + p.signerEmail,
+        p.buyerPhone ? "Phone: " + p.buyerPhone : null,
+        "",
+        "EMD of $" + p.emdAmount + " will be wired by " + (p.emdTime || "5:00 PM") + " on " + p.emdDueDate + ".",
+        "Close of Escrow: " + p.coeDate,
+        "",
+        "Please reach out to them directly with wire instructions and next steps. Copy me on all correspondence.",
+        "",
+        "Best,",
+        "Ava Stone | Transaction Coordinator | Flipur Companies",
+        "ava@flipur.io | 17011 Beach Blvd Suite 550, Huntington Beach CA 92647",
+      ].filter(l => l !== null).join("\n");
+      await sendEmail({
+        to: p.escrowEmail,
+        cc: p.signerEmail,
+        subject: "New Buyer Introduction — " + p.propertyAddress + " | " + (p.escrowCompany || "Escrow"),
+        body,
+      });
+      return { summary: "Buyer intro sent to " + p.escrowAgent + " at " + (p.escrowCompany || p.escrowEmail) + ". Copied " + p.signerName + "." };
+    }
     case "slack_message":
       return { summary: "Slack message sent." };
     default:
