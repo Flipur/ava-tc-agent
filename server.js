@@ -386,10 +386,6 @@ slackApp.message(async ({ message, say }) => {
     }
   }
 
-  // Property channels (#23821-... etc) are AVA's dedicated deal channels — respond to everything
-  const chanName = await getChannelNameCached(message.channel);
-  const isPropertyChannel = /^\d+/.test(chanName);
-
   // Threads where AVA has already participated — no re-mention needed
   let isAvaThread = false;
   if (threadTs && !isMention) {
@@ -400,7 +396,7 @@ slackApp.message(async ({ message, say }) => {
   }
 
   const isTaggedThreadReply = !!threadTs && isMention;
-  if (isMention || isDM || isTaggedThreadReply || isPropertyChannel || isAvaThread) {
+  if (isMention || isDM || isTaggedThreadReply || isAvaThread) {
     await handleSlackMessage({
       event: message,
       say,
