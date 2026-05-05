@@ -320,6 +320,17 @@ export function isApproval(text) {
   ].some((k) => t.includes(k));
 }
 
+const channelNameCache = new Map();
+async function getChannelNameCached(channelId) {
+  if (channelNameCache.has(channelId)) return channelNameCache.get(channelId);
+  try {
+    const res = await slackApp.client.conversations.info({ channel: channelId });
+    const name = res.channel?.name || "";
+    channelNameCache.set(channelId, name);
+    return name;
+  } catch { return ""; }
+}
+
 const processedEvents = new Set();
 function isDuplicate(eventId) {
   if (!eventId) return false;
@@ -368,8 +379,21 @@ slackApp.message(async ({ message, say }) => {
     }
   }
 
+  // Property channels (#23821-... etc) are AVA's dedicated deal channels — respond to everything
+  const chanName = await getChannelNameCached(message.channel);
+  const isPropertyChannel = /^\d+/.test(chanName);
+
+  // Threads where AVA has already participated — no re-mention needed
+  let isAvaThread = false;
+  if (threadTs && !isMention) {
+    try {
+      const replies = await slackApp.client.conversations.replies({ channel: message.channel, ts: threadTs, limit: 10 });
+      isAvaThread = (replies.messages || []).some(m => m.bot_id || m.app_id);
+    } catch {}
+  }
+
   const isTaggedThreadReply = !!threadTs && isMention;
-  if (isMention || isDM || isTaggedThreadReply) {
+  if (isMention || isDM || isTaggedThreadReply || isPropertyChannel || isAvaThread) {
     await handleSlackMessage({
       event: message,
       say,
