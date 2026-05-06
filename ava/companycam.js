@@ -24,23 +24,20 @@ export async function getProject(projectId) {
 // Get all photos for a project with their tags and comments
 export async function getProjectPhotos(projectId) {
   const res = await fetch(
-    `${COMPANYCAM_API}/projects/${projectId}/photos?per_page=50`,
+    `${COMPANYCAM_API}/projects/${projectId}/photos?per_page=100`,
     { headers: getHeaders() }
   );
   const photos = await res.json();
   if (!Array.isArray(photos)) return [];
 
-  const enriched = [];
-  for (const photo of photos.slice(0, 20)) {
-    const photoData = {
-      id: photo.id,
-      url: photo.uris?.find(u => u.size === "original")?.uri ||
-           photo.uris?.[0]?.uri || "",
-      caption: photo.tags?.map(t => t.display_value).join(", ") || "",
-      coordinates: photo.coordinates || null,
-    };
+  // Fetch all photo metadata + comments in parallel
+  const selected = photos.slice(0, 20);
+  const enriched = await Promise.all(selected.map(async (photo) => {
+    const url = photo.uris?.find(u => u.size === "large")?.uri ||
+                photo.uris?.find(u => u.size === "original")?.uri ||
+                photo.uris?.[0]?.uri || "";
+    let caption = photo.tags?.map(t => t.display_value).join(", ") || "";
 
-    // Get comments for this photo
     try {
       const commRes = await fetch(
         `${COMPANYCAM_API}/photos/${photo.id}/comments`,
@@ -48,17 +45,14 @@ export async function getProjectPhotos(projectId) {
       );
       const comments = await commRes.json();
       if (Array.isArray(comments) && comments.length > 0) {
-        photoData.caption += (photoData.caption ? " — " : "") +
-          comments.map(c => c.content).join("; ");
+        caption += (caption ? " — " : "") + comments.map(c => c.content).join("; ");
       }
-    } catch (e) {
-      // ignore comment fetch errors
-    }
+    } catch (e) { /* ignore */ }
 
-    enriched.push(photoData);
-  }
+    return { id: photo.id, url, caption, coordinates: photo.coordinates || null };
+  }));
 
-  return enriched;
+  return enriched.filter(p => p.url);
 }
 
 // Get project notepad

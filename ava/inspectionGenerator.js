@@ -30,12 +30,32 @@ export async function resolveCompanyCamUrl(url, propertyAddress) {
   return url;
 }
 
+// Extract CompanyCam URL from a Slack message text (handles <URL|display> Slack format)
+function extractCCUrl(text) {
+  if (!text) return null;
+  // Slack wraps URLs as <https://...|display> — extract just the URL
+  const slackFmt = text.match(/<(https?:\/\/app\.companycam\.com\/[^|>\s]+)/);
+  if (slackFmt) return slackFmt[1];
+  const plain = text.match(/https?:\/\/app\.companycam\.com\/[^\s>|]+/);
+  return plain ? plain[0] : null;
+}
+
 export async function findCompanyCamLinkInChannel(channelId) {
   try {
     const res = await slackApp.client.conversations.history({ channel: channelId, limit: 200 });
     for (const msg of res.messages || []) {
-      const match = (msg.text || "").match(/https?:\/\/app\.companycam\.com\/[^\s>|]+/);
-      if (match) return match[0];
+      const url = extractCCUrl(msg.text);
+      if (url) return url;
+      // Also check thread replies of this message
+      if (msg.reply_count) {
+        try {
+          const thread = await slackApp.client.conversations.replies({ channel: channelId, ts: msg.ts, limit: 20 });
+          for (const reply of thread.messages || []) {
+            const threadUrl = extractCCUrl(reply.text);
+            if (threadUrl) return threadUrl;
+          }
+        } catch (e) { /* ignore */ }
+      }
     }
     return null;
   } catch (e) {
@@ -51,8 +71,8 @@ export async function scanChannelForContext(channelId) {
     const context = { companyCamUrl: null, arvMentions: [], offerPrice: null, notes: [], attachments: [] };
     for (const msg of messages) {
       const text = msg.text || "";
-      const ccMatch = text.match(/https?:\/\/app\.companycam\.com\/[^\s>|]+/);
-      if (ccMatch && !context.companyCamUrl) context.companyCamUrl = ccMatch[0];
+      const ccUrl = extractCCUrl(text);
+      if (ccUrl && !context.companyCamUrl) context.companyCamUrl = ccUrl;
       const arvMatch = text.match(/arv[:\s]*\$?([\d,]+)/i);
       if (arvMatch) context.arvMentions.push(arvMatch[1].replace(/,/g,''));
       const offerMatch = text.match(/(?:offer|purchase|price|contract)[:\s]*\$?([\d,]+)/i);
@@ -64,6 +84,19 @@ export async function scanChannelForContext(channelId) {
         if (file.name) context.attachments.push(file.name);
       }
     }
+    // If not found in main channel, check thread replies
+    if (!context.companyCamUrl) {
+      for (const msg of messages.filter(m => m.reply_count)) {
+        try {
+          const thread = await slackApp.client.conversations.replies({ channel: channelId, ts: msg.ts, limit: 20 });
+          for (const reply of thread.messages || []) {
+            const ccUrl = extractCCUrl(reply.text);
+            if (ccUrl) { context.companyCamUrl = ccUrl; break; }
+          }
+        } catch (e) { /* ignore */ }
+        if (context.companyCamUrl) break;
+      }
+    }
     return context;
   } catch (e) {
     console.error("scanChannelForContext error:", e.message);
@@ -71,26 +104,33 @@ export async function scanChannelForContext(channelId) {
   }
 }
 
-async function analyzePhotosWithVision(photos, acqNotes) {
-  // Fetch photos in parallel — cap at 8 to keep token count and latency reasonable
-  const selected = photos.filter(p => p.url).slice(0, 8);
-  const fetched = await Promise.all(selected.map(async (photo) => {
+// Downloads photos to base64 in parallel. Returns enriched photo objects with base64 attached.
+export async function downloadPhotosToBase64(photos, limit = 14) {
+  const selected = photos.filter(p => p.url).slice(0, limit);
+  const results = await Promise.all(selected.map(async (photo) => {
     try {
       const response = await fetch(photo.url);
+      if (!response.ok) throw new Error("HTTP " + response.status);
       const buffer = await response.arrayBuffer();
       const base64 = Buffer.from(buffer).toString("base64");
-      return { base64, caption: photo.caption || null };
+      // Detect media type from content-type or default to jpeg
+      const contentType = response.headers.get("content-type") || "image/jpeg";
+      const mediaType = contentType.startsWith("image/") ? contentType.split(";")[0] : "image/jpeg";
+      return { ...photo, base64, mediaType };
     } catch (e) {
-      console.error("Failed to fetch photo:", e.message);
+      console.error("Failed to download photo:", photo.url, e.message);
       return null;
     }
   }));
+  return results.filter(Boolean);
+}
 
+async function analyzePhotosWithVision(photosWithBase64, acqNotes) {
   const imageContents = [];
-  for (const item of fetched) {
-    if (!item) continue;
-    imageContents.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: item.base64 } });
-    if (item.caption) imageContents.push({ type: "text", text: "Caption: " + item.caption });
+  for (const photo of photosWithBase64) {
+    if (!photo.base64) continue;
+    imageContents.push({ type: "image", source: { type: "base64", media_type: photo.mediaType || "image/jpeg", data: photo.base64 } });
+    if (photo.caption) imageContents.push({ type: "text", text: "Caption: " + photo.caption });
   }
   if (imageContents.length === 0 && !acqNotes) return null;
 
@@ -402,43 +442,64 @@ export async function generateInspectionPDF(payload) {
 }
 
 export async function createInspectionReport({ propertyAddress, channelId, companyCamUrl, acqNotes, followUpAnswers, dealContext }) {
-  // 1. Scan channel
+  // 1. Scan channel for context + CompanyCam URL
   let channelContext = {};
   if (channelId) channelContext = await scanChannelForContext(channelId);
 
   // 2. Resolve CompanyCam URL
   let ccUrl = companyCamUrl || channelContext.companyCamUrl;
   if (ccUrl) ccUrl = await resolveCompanyCamUrl(ccUrl, propertyAddress);
+  console.log("CompanyCam URL:", ccUrl || "none found");
 
-  // 3. Fetch photos
-  let photos = [];
+  // 3. Fetch photo metadata from CompanyCam API
+  let photoMeta = [];
   if (ccUrl) {
-    const ccContext = await getCompanyCamContext(ccUrl);
-    if (ccContext) { photos = ccContext.photos || []; console.log("Photos fetched:", photos.length); }
+    try {
+      const ccContext = await getCompanyCamContext(ccUrl);
+      if (ccContext) {
+        photoMeta = ccContext.photos || [];
+        console.log("CompanyCam photos found:", photoMeta.length);
+      }
+    } catch (e) {
+      console.error("CompanyCam fetch error:", e.message);
+    }
   }
 
-  // 4. Parse answers
+  // 4. Download all photos to base64 in Node.js — reuse for both vision and PDF
+  let photosWithBase64 = [];
+  if (photoMeta.length > 0) {
+    console.log("Downloading photos to base64...");
+    photosWithBase64 = await downloadPhotosToBase64(photoMeta, 14);
+    console.log("Photos downloaded:", photosWithBase64.length);
+  }
+
+  // 5. Parse answers
   const userAnswers = parseFollowUpAnswers(followUpAnswers || "", acqNotes || "");
 
-  // 5. Combine notes
+  // 6. Combine notes
   const allNotes = [acqNotes, channelContext.notes?.slice(0,5).join(". "), followUpAnswers].filter(Boolean).join(". ");
 
-  // 6. Vision analysis
-  console.log("Analyzing with Claude Vision — photos:", photos.length);
-  const visionData = await analyzePhotosWithVision(photos, allNotes);
+  // 7. Vision analysis — uses already-downloaded base64
+  console.log("Running Claude Vision analysis — photos:", photosWithBase64.length);
+  const visionData = await analyzePhotosWithVision(photosWithBase64, allNotes);
 
-  // 7. Build report
+  // 8. Build report structure
   const reportData = buildReportData(propertyAddress, dealContext || {}, visionData, userAnswers);
 
-  // 8. Assign photos to sections
-  if (photos.length > 0 && reportData.findingsSections.length > 0) {
-    const perSection = Math.ceil(photos.length / reportData.findingsSections.length);
+  // 9. Assign photos to sections — pass base64 so Python doesn't need to re-download
+  if (photosWithBase64.length > 0 && reportData.findingsSections.length > 0) {
+    const perSection = Math.ceil(photosWithBase64.length / reportData.findingsSections.length);
     reportData.findingsSections.forEach((sec, i) => {
-      sec.photos = photos.slice(i * perSection, (i+1) * perSection).map(p => ({ url: p.url, caption: p.caption || "" }));
+      sec.photos = photosWithBase64.slice(i * perSection, (i + 1) * perSection).map(p => ({
+        url: p.url,
+        base64: p.base64,
+        mediaType: p.mediaType || "image/jpeg",
+        caption: p.caption || "",
+      }));
     });
   }
 
-  // 9. Generate PDF
+  // 10. Generate PDF
   return generateInspectionPDF(reportData);
 }
 

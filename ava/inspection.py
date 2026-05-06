@@ -59,16 +59,35 @@ def dl_image(url, tmp):
     except:
         return None
 
+def get_image_path(ph, tmp):
+    """Use base64 data if available (pre-downloaded), otherwise fall back to URL download."""
+    b64 = ph.get('base64', '')
+    url = ph.get('url', '')
+    cap = ph.get('caption', '')
+    if b64:
+        try:
+            import base64 as b64mod
+            ext = 'jpg'
+            mt = ph.get('mediaType', 'image/jpeg')
+            if 'png' in mt: ext = 'png'
+            elif 'gif' in mt: ext = 'gif'
+            path = os.path.join(tmp, 'img_' + str(abs(hash(b64[:32]))) + '.' + ext)
+            open(path, 'wb').write(b64mod.b64decode(b64))
+            return path, cap
+        except:
+            pass
+    if url:
+        ip = dl_image(url, tmp)
+        if ip: return ip, cap
+    return None, cap
+
 def photo_grid(photos, tmp, cols=2):
     if not photos: return []
     elements = []
     paths = []
     for ph in photos[:16]:
-        url = ph.get('url', '')
-        cap = ph.get('caption', '')
-        if url:
-            ip = dl_image(url, tmp)
-            if ip: paths.append((ip, cap))
+        ip, cap = get_image_path(ph, tmp)
+        if ip: paths.append((ip, cap))
     for i in range(0, len(paths), cols):
         row = []
         for j in range(cols):
