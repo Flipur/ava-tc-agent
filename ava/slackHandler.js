@@ -410,14 +410,14 @@ export async function handleSlackMessage({ event, say, type }) {
 
     const safeText = (avaResponse || "").trim() || "On it.";
 
-    await removeReaction();
+    // Always inject channelId for inspection payloads regardless of approval path
+    if (action && action.type === "generate_inspection" && action.payload) {
+      action.payload.channelId = channel;
+    }
 
     if (action && action.requiresApproval) {
+      await removeReaction();
       await say({ text: safeText, thread_ts: replyTs });
-      // Inject channelId into inspection payload
-      if (action.type === "generate_inspection" && action.payload) {
-        action.payload.channelId = channel;
-      }
       const approvalKey = threadTs || ts;
       console.log("Storing pending approval with key: " + approvalKey);
       pendingApprovals.set(approvalKey, {
@@ -427,10 +427,36 @@ export async function handleSlackMessage({ event, say, type }) {
         dealContext: context.deal || null,
         createdAt: Date.now(),
       });
+      savePending(pendingApprovals);
     } else if (action && !action.requiresApproval) {
+      // Post response first, then execute (keep hourglass up during slow actions)
       await say({ text: safeText, thread_ts: replyTs });
-      await executeAction(action);
+      try {
+        const result = await executeAction(action);
+        await removeReaction();
+        if (result && result.pdfBuffer && result.fileName) {
+          try {
+            await slackApp.client.files.uploadV2({
+              channel_id: channel,
+              thread_ts: replyTs,
+              filename: result.fileName,
+              file: result.pdfBuffer,
+              initial_comment: result.summary || "Here you go.",
+            });
+          } catch (uploadErr) {
+            console.error("PDF upload failed:", uploadErr.message);
+            await say({ text: "Report generated but upload failed: " + uploadErr.message, thread_ts: replyTs });
+          }
+        } else if (result && result.summary) {
+          await say({ text: result.summary, thread_ts: replyTs });
+        }
+      } catch (execErr) {
+        console.error("Action execution failed:", execErr.message);
+        await removeReaction();
+        await say({ text: "Ran into an issue: " + execErr.message + ". Want me to retry?", thread_ts: replyTs });
+      }
     } else {
+      await removeReaction();
       await say({ text: safeText, thread_ts: replyTs });
     }
   } catch (err) {
