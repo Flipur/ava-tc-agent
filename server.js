@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { handleSlackMessage } from "./ava/slackHandler.js";
 import { handleApproval, pendingApprovals, savePending } from "./ava/approvalHandler.js";
 import { startEmailPoller } from "./ava/emailPoller.js";
+import { startWeeklyCoachScheduler } from "./ava/weeklyCoach.js";
 import {
   getDealContext,
   getAllActiveDeals,
@@ -411,4 +412,5 @@ const PORT = process.env.PORT || 3000;
   await slackApp.start(PORT);
   console.log("Ava Stone is live on port " + PORT);
   startEmailPoller();
+  startWeeklyCoachScheduler();
 })();

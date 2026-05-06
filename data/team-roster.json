@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Drew Wolfe",
+    "closeName": "Drew Wolfe",
+    "slackId": "SLACK_USER_ID_HERE",
+    "role": "Dispo",
+    "targets": {
+      "calls/day": 30,
+      "sms/month": 250,
+      "deals/month": 1
+    }
+  },
+  {
+    "name": "Dezarre Wilkerson",
+    "closeName": "Dezarre Wilkerson",
+    "slackId": "SLACK_USER_ID_HERE",
+    "role": "Dispo",
+    "targets": {
+      "calls/day": 30,
+      "sms/month": 250,
+      "deals/month": 1
+    }
+  }
+]
