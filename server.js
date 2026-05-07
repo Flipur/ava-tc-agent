@@ -387,12 +387,15 @@ slackApp.message(async ({ message, say }) => {
     }
   }
 
-  // Threads where AVA has already participated — no re-mention needed
+  // Only continue a thread if the message immediately before this one was from AVA
+  // (i.e. someone is directly replying to her — not just talking in a thread she's been in)
   let isAvaThread = false;
   if (threadTs && !isMention) {
     try {
-      const replies = await slackApp.client.conversations.replies({ channel: message.channel, ts: threadTs, limit: 10 });
-      isAvaThread = (replies.messages || []).some(m => m.user === process.env.SLACK_BOT_USER_ID);
+      const replies = await slackApp.client.conversations.replies({ channel: message.channel, ts: threadTs, limit: 20 });
+      const msgs = (replies.messages || []).filter(m => m.ts !== message.ts);
+      const lastMsg = msgs[msgs.length - 1];
+      isAvaThread = lastMsg?.user === process.env.SLACK_BOT_USER_ID;
     } catch {}
   }
 
