@@ -392,7 +392,7 @@ slackApp.message(async ({ message, say }) => {
   if (threadTs && !isMention) {
     try {
       const replies = await slackApp.client.conversations.replies({ channel: message.channel, ts: threadTs, limit: 10 });
-      isAvaThread = (replies.messages || []).some(m => m.bot_id || m.app_id);
+      isAvaThread = (replies.messages || []).some(m => m.user === process.env.SLACK_BOT_USER_ID);
     } catch {}
   }
 
