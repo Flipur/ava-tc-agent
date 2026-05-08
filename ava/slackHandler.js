@@ -447,7 +447,7 @@ export async function handleSlackMessage({ event, say, type }) {
             console.error("PDF upload failed:", uploadErr.message);
             await say({ text: "Report generated but upload failed: " + uploadErr.message, thread_ts: replyTs });
           }
-        } else if (result && result.summary) {
+        } else if (result && result.summary && action.type !== "slack_message" && action.type !== "remember") {
           await say({ text: result.summary, thread_ts: replyTs });
         }
       } catch (execErr) {
